@@ -1,7 +1,11 @@
 #Made By omthedev
 #SansScript
+import string
 # Constants
+
 DIGIT = '0123456789'
+
+DIGITS_SANS = '०१२३४५६७८९'
 # Errors 
 class Error:
     def __init__(self,pos_start,pos_end,error,details):
@@ -78,7 +82,12 @@ tt_lparen = 'LPAREN'
 tt_rparen = 'RPAREN'
 tt_eof = 'EOF'
 tt_pow = 'POW'
-
+tt_id = 'IDENTIFIER'
+tt_keyword = 'KEYWORD'
+tt_eq = 'EQ'
+tt_ne = 'NE'
+tt_true = 'TRUE'
+tt_false = 'FALSE'
 class Token:
     def __init__(self, type, value=None, pos_start=None, pos_end=None):
         self.type = type
@@ -109,8 +118,18 @@ class Lexer:
         while(self.current_char !=None):
             if self.current_char in ' \t':
                 self.advance()
-            elif self.current_char in DIGIT:
+            elif self.current_char in DIGITS_SANS:
+                sans_list = list(DIGITS_SANS)
+                # print(sans_list)
+                self.current_char = str(sans_list.index(self.current_char))
+                # print(self.current_char)
+                is_sans = True
                 tokens.append(self.make_number())
+            elif self.current_char in DIGIT:
+                # print(self.current_char)
+                is_sans = False
+                tokens.append(self.make_number())
+                
             elif self.current_char == '+':
                 tokens.append(Token(tt_plus,pos_start=self.pos))
                 self.advance()
@@ -132,6 +151,13 @@ class Lexer:
             elif self.current_char == '^':
                 tokens.append(Token(tt_pow,pos_start=self.pos))
                 self.advance()
+            elif self.current_char == '\n':
+                tokens.append(Token(tt_eof,pos_start=self.pos))
+                self.advance()
+            elif self.current_char == 'यदि' :
+                tokens.append(Token(tt_keyword,'IF',pos_start=self.pos))
+                self.advance()
+            
             
             else:
                 pos_start = self.pos.copy()
@@ -224,6 +250,7 @@ class Parser:
             result.register(self.advance())
             factor = result.register(self.factor())
             if result.error: return result
+            return result.success(UnaryOpNode(token,factor))
         return self.power()
         
     def term(self):
