@@ -13,7 +13,7 @@ DIGITS_SANS = '०१२३४५६७८९'
 LETTERS_DIGITS_S = LETTERS + DIGITS_SANS
 LETTERS_DIGITS = LETTER + DIGIT
 
-KEYWORD = ['चरः']
+
 # Errors 
 class Error:
     def __init__(self,pos_start,pos_end,error,details):
@@ -96,6 +96,14 @@ tt_eq = 'EQ'
 tt_ne = 'NE'
 tt_true = 'TRUE'
 tt_false = 'FALSE'
+tt_ee = 'EE'
+tt_ne = 'NE'
+tt_lt = 'LT'
+tt_gt = 'GT'
+tt_lte = 'LTE'
+tt_gte = 'GTE'
+
+KEYWORD = ['चरः','तथा','वा','नहि']
 class Token:
     def __init__(self, type, value=None, pos_start=None, pos_end=None):
         self.type = type
@@ -165,6 +173,17 @@ class Lexer:
             elif self.current_char == '=' :
                 tokens.append(Token(tt_eq,pos_start=self.pos))
                 self.advance()
+            elif self.current_char == '!':
+                tok, error =  self.make_not_equals()
+                if error: return [],error
+                tokens.append(tok)
+            elif self.current_char == '=':
+                tokens.append(self.make_equals())
+            elif self.current_char == '<':
+                tokens.append(self.less_than())
+            elif self.current_char ==  '>':
+                tokens.append(self.more_than())
+
             
             
             else:
@@ -201,6 +220,16 @@ class Lexer:
             self.advance()
         token_type = tt_keyword if id_str in KEYWORD else tt_id
         return Token(token_type,id_str,pos_start,self.pos)
+    def make_not_equals(self):
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.current_char == '=':
+            self.advance()
+            return Token(tt_ne,pos_start=pos_start,pos_end=self.pos),None
+        
+        self.advance()
+        return None,
 
 # Nodes
 class NumberNode:
@@ -334,9 +363,11 @@ class ParseResult:
     def __init__(self):
         self.error = None
         self.node = None
+        self.advance_count = 0
     def register_advancement(self):
-        pass
+        self.advance_count += 1
     def register(self,res):
+        self.advance_count += res.advance_count
         if res.error: self.error = res.error
         return res.node
         
@@ -344,7 +375,8 @@ class ParseResult:
         self.node = node
         return self
     def failure(self,error):
-        self.error = error
+        if not self.error or self.advance_count == 0 :
+            self.error = error
         return self
 # Number
 class Number:
