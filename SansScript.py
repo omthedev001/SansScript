@@ -30,8 +30,25 @@ class Invalid_Syntax_Error(Error):
     def __init__(self,pos_start,pos_end,details = ''):
         super().__init__(pos_start,pos_end,'अवैध वाक्यविन्यासः | avaidh vakyavinyasyah', details)
 class RTError(Error):
-    def __init__(self,pos_start,pos_end,details = ''):
+    def __init__(self,pos_start,pos_end,details,context):
         super().__init__(pos_start,pos_end,'रनटाइम् त्रुटिः | runtime trutih', details)
+        self.context =  context
+    def as_string(self):
+        result = self.generate_traceback()
+        result +=  f"{self.error_name}:{self.details}"
+        result += '\n\n' + string_with_arrows(self.pos_start.file_text,self.pos_start,self.pos_end)
+        return result
+    def generate_traceback(self):
+        result = ''
+        ctx = self.context
+        pos = self.pos_start
+        while ctx:
+            result = f'      संचिका <{self.pos_start.file_name}> , पंक्ति {self.pos_start.line+1} |\n      sanchikaa <{self.pos_start.file_name}>, pankti {self.pos_start.line+1}\n '
+            pos = ctx.parent_entry_pos
+            ctx = ctx.parent
+        return 'अनुसन्धानं कुर्वन्तु, अद्यतनतमं आह्वानं अन्तिमम् | anusandhanam kurvantu , adyatanatamah aahvanah antimah :-\n' + result
+    
+
 # Position
 class Position:
     def __init__(self,index,line,column,file_name,file_text):
@@ -240,60 +257,97 @@ class RTresult:
         if res.error:
             self.error =  res.error
         return res.value
+    def success(self,value):
+        self.value = value
+        return self
+    def failure(self,error):
+        self.error = error
+        return self
+    
 # Values
 class Number:
     def __init__(self,value):
         self.value = value
         self.set_pos()
+        self.set_context()
     def set_pos(self,pos_start = None,pos_end = None):
         self.pos_start =  pos_start
         self.pos_end = pos_end
         return self
+    def set_context(self,context = None):
+        self.context = context
+        return self
     def added_to(self,other):
         if isinstance(other,Number):
-            return Number(self.value + other.value)
+            return Number(self.value + other.value).set_context(self.context),None
     def subtracted_from(self,other):
         if isinstance(other,Number):
-            return Number(self.value - other.value)
+            return Number(self.value - other.value).set_context(self.context),None
     def multiplied_by(self,other):
         if isinstance(other,Number):
-            return Number(self.value * other.value)
+            return Number(self.value * other.value).set_context(self.context),None
     def divided_by(self,other):
         if isinstance(other,Number):
-            return Number(self.value / other.value)
+            if other.value == 0:
+                return None,RTError(
+                    other.pos_start,other.pos_end,
+                    'शून्येन विभागः | shunyen vibhagah',
+                    self.context
+                )
+            return Number(self.value / other.value).set_context(self.context),None
     def __repr__(self):
         return str(self.value)
-    
+# Context 
+class Context:
+    def __init__(self,display_name,parent = None,parent_entry_pos = None):
+        self.display_name = display_name
+        self.parent = parent
+        self.parent_entry_pos = parent_entry_pos
 # Interpreter
 class Interpreter:
-    def visit(self, node):
+    def visit(self, node, context):
         method_name = f'visit_{type(node).__name__}'
         method =  getattr(self, method_name, self.no_visit_method)
-        return method(node)
-    def no_visit_method(self,node):
+        return method(node,context)
+    
+    def no_visit_method(self,node,context):
         raise Exception(f'No visit_{type(node).__name__} method defined')
-    def visit_NumberNode(self,node):
-        return Number(node.tok.value).set_pos(node.pos_start,node.pos_end)
-    def visit_BinaryOpNode(self,node):
-        left = self.visit(node.left_node)
-        right = self.visit(node.right_node)
+    
+    def visit_NumberNode(self,node,context):
+        return RTresult().success(Number(node.tok.value).set_context(context).set_pos(node.pos_start,node.pos_end))
+    
+    def visit_BinaryOpNode(self,node,context):
+        res = RTresult()
+        left = res.register(self.visit(node.left_node,context))
+        if res.error:return res
+        right = res.register(self.visit(node.right_node,context))
+        if res.error:return res
 
         if node.op_tok.type == TT_PLUS:
-            result = left.added_to(right)
+            result,error = left.added_to(right)
         elif node.op_tok.type == TT_MINUS:
-            result = left.subtracted_from(right)
+            result,error = left.subtracted_from(right)
         elif node.op_tok.type == TT_MUL:
-            result = left.multiplied_by(right)
+            result,error = left.multiplied_by(right)
         elif node.op_tok.type == TT_DIV:
-            result = left.divided_by(right)
-        
-        return result.set_pos(node.pos_start,node.pos_end)
+            result,error = left.divided_by(right)
+        if error:
+            return res.failure(error)
+        else:
+            return res.success(result.set_pos(node.pos_start,node.pos_end))
 
-    def visit_UnaryOpNode(self,node):
-        number =  self.visit(node.node)
+    def visit_UnaryOpNode(self,node,context):
+        res = RTresult()
+        number =  res.register(self.visit(node.node,context))
+        if res.error:
+            return res
+        error = None
         if node.op_tok.type ==  TT_MINUS:
-            number =  number.multiplied_by(Number(-1)).set_pos(node.pos_start,node.pos_end)
-        return number
+            number,error =  number.multiplied_by(Number(-1))
+        if error:
+            return res.failure(error)
+        else:
+            return res.success(number.set_pos(node.pos_start,node.pos_end))
 
     
 # Run
@@ -305,6 +359,7 @@ def Run(text,file_name):
     ast = parser.parse()
     if ast.error : 
         return None,ast.error
-    interpreter = Interpreter( )
-    result = interpreter.visit(ast.node)
-    return result,None
+    interpreter = Interpreter()
+    context = Context('<कार्यक्रम> | <karyakram>')
+    result = interpreter.visit(ast.node,context)
+    return result.value,result.error
