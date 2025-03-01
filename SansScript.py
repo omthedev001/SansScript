@@ -1,4 +1,7 @@
 from strings_with_arrows import *
+import string
+from indic_transliteration import sanscript
+from indic_transliteration.sanscript import transliterate
 
 TT_INT = "INT"
 TT_FLOAT = "FLOAT"
@@ -9,8 +12,17 @@ TT_DIV = "DIV"
 TT_LPAREN = "LPAREN"
 TT_RPAREN = "RPAREN"
 TT_EOF = 'EOF'
+TT_POW = 'POW'
+TT_IDENTIFIER = 'IDENTIFIER'
+TT_KEYWORD = 'KEYWORD'
+TT_EQ = 'EQUAL'
+
+KEYWORDS = ['charaH','charah']
+
 DIGITS_S = '०१२३४५६७८९'
 DIGITS = '0123456789'
+LETTERS = string.ascii_letters
+LETTERS_DIGITS = LETTERS + DIGITS
 # Error
 class Error:
     def __init__(self,pos_start,pos_end,err_name,details):
@@ -79,6 +91,8 @@ class Token:
             self.pos_end.advance()
         if pos_end:
             self.pos_end = pos_end.copy()
+    def matches(self,type_,value):
+        return self.type == type_ and self.value == value
     def __repr__(self):
         if self.value:
             return f"{self.type}:{self.value}"
@@ -99,8 +113,9 @@ class Lexer:
         while self.current_char is not None:
             if self.current_char in ' \t':
                 self.advance()  # Skip whitespace 
+            elif self.current_char in LETTERS:
+                tokens.append(self.make_identifier())
             elif self.current_char in DIGITS + DIGITS_S:
-                
                 tokens.append(self.make_number())  
             elif self.current_char == '+':
                 tokens.append(Token(TT_PLUS,pos_start = self.pos))  
@@ -120,12 +135,19 @@ class Lexer:
             elif self.current_char == ')':
                 tokens.append(Token(TT_RPAREN,pos_start = self.pos))
                 self.advance()
+            elif self.current_char == '^':
+                tokens.append(Token(TT_POW,pos_start=self.pos))
+                self.advance()
+            elif self.current_char == '=':
+                tokens.append(Token(TT_EQ,pos_start=self.pos))
+                self.advance()
             else:
                 pos_start = self.pos.copy()
                 character = self.current_char
                 self.advance()
                 return [], Illegal_Character_Error(pos_start,self.pos,("'" + character + "'"))  # Handle invalid characters
         tokens.append(Token(TT_EOF, pos_start=self.pos))
+        print(tokens)
         return tokens, None  # Return tokens and no error
     def make_number(self):
         # print("Make Number was called")
@@ -152,6 +174,16 @@ class Lexer:
             return Token(TT_INT,int(n_str),pos_start,self.pos)
         else:
             return Token(TT_FLOAT,float(n_str),pos_start,self.pos)
+    def make_identifier(self):
+        id_str = ''
+        pos_start = self.pos.copy()
+
+        while self.current_char != None and self.current_char in LETTERS_DIGITS + '_':
+            id_str += self.current_char
+            self.advance()
+        
+        tok_type = TT_KEYWORD if id_str in KEYWORDS else TT_IDENTIFIER
+        return Token(tok_type,id_str,pos_start,self.pos)
 # Number 
 class NumberNode:
     def __init__(self, tok):
@@ -178,6 +210,20 @@ class UnaryOpNode:
         self.pos_end  = node.pos_end
     def __repr__(self):
         return f'({self.op_tok},{self.node})'
+class VarAccessNode:
+    def __init__(self,var_name_tok):
+        self.var_name_tok = var_name_tok
+        self.pos_start = self.var_name_tok.pos_start
+        self.pos_end = self.var_name_tok.pos_end
+class VarAssignNode:
+    def __init__(self,var_name_tok,value_node):
+        self.var_name_tok = var_name_tok
+        self.value_node = value_node
+
+        self.pos_start = self.var_name_tok.pos_start
+        self.pos_end = self.value_node.pos_end
+
+
 # Parse Result
 class ParseResult:
     def __init__(self):
@@ -211,17 +257,15 @@ class Parser:
         if self.tok_index < len(self.tokens):
             self.current_token = self.tokens[self.tok_index]
         return self.current_token
-    def factor(self):
+    def atom(self):
         res = ParseResult()
         tok = self.current_token
-        if tok.type in (TT_PLUS,TT_MINUS):
-            res.register(self.advance())
-            factor = res.register(self.factor())
-            if res.error : return res
-            return res.success(UnaryOpNode(tok,factor))
-        elif tok.type in (TT_INT,TT_FLOAT):
+        if tok.type in (TT_INT,TT_FLOAT):
             res.register(self.advance())
             return res.success(NumberNode(tok))
+        elif tok.type == TT_IDENTIFIER:
+            res.register(self.advance())
+            return res.success(VarAccessNode(tok))
         elif tok.type ==  TT_LPAREN:
             res.register(self.advance())
             expr =  res.register(self.expr())
@@ -231,20 +275,51 @@ class Parser:
                 return res.success(expr)
             else:
                 return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,"अपेक्षितं ')' | apekchhit ')'"))
-        return res.failure(Invalid_Syntax_Error(tok.pos_start,tok.pos_end,'अपेक्षितं INT अथवा FLOAT | apekchhit INT athva FLOAT'))
+        return res.failure(Invalid_Syntax_Error(tok.pos_start,tok.pos_end,'अपेक्षितं INT,FLOAT,+,-, अथवा ( | apekchhit INT,FLOAT,+,-, athva ('))
+    def power(self):
+        return self.bin_op(self.atom,(TT_POW, ), self.factor)
+    def factor(self):
+        res = ParseResult()
+        tok = self.current_token
+        if tok.type in (TT_PLUS,TT_MINUS):
+            res.register(self.advance())
+            factor = res.register(self.factor())
+            if res.error : return res
+            return res.success(UnaryOpNode(tok,factor))
+        
+        return self.power()
     def term(self):
         return self.bin_op(self.factor,(TT_MUL,TT_DIV))
     def expr(self):
-        return self.bin_op(self.term,(TT_MINUS,TT_PLUS))    
-    def bin_op(self,func,ops):
         res  = ParseResult()
-        left = res.register(func())
+        if self.current_token.matches(TT_KEYWORD,'charaH') or self.current_token.matches(TT_KEYWORD,'charah'):
+            res.register(self.advance())
+            print(self.current_token)
+            if self.current_token.type != TT_IDENTIFIER:
+                return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,'अपेक्षितं परिचयकः | apekchhit parichayakah'))
+            var_name = self.current_token
+            res.register(self.advance())
+            print(self.current_token)
+            if self.current_token.type != TT_EQ:
+                return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,"अपेक्षितं ':' | apekchhit ':")) 
+            res.register(self.advance())
+
+            expr = res.register(self.expr())
+            if res.error: 
+                return res  
+            return res.success(VarAssignNode(var_name,expr))                     
+        return self.bin_op(self.term,(TT_MINUS,TT_PLUS))    
+    def bin_op(self,func_a,ops,func_b=None):
+        res  = ParseResult()
+        if func_b == None:
+            func_b = func_a
+        left = res.register(func_a())
         if res.error:return res
         # self.advance()
         while self.current_token.type in ops:
             op_tok = self.current_token
             res.register(self.advance())
-            right = res.register(func())
+            right = res.register(func_b())
             if res.error : return res 
             left = BinaryOpNode(left,op_tok,right)
         return res.success(left)
@@ -286,6 +361,9 @@ class Number:
     def multiplied_by(self,other):
         if isinstance(other,Number):
             return Number(self.value * other.value).set_context(self.context),None
+    def to_power(self,other):
+        if isinstance(other,Number):
+            return Number(self.value ** other.value).set_context(self.context),None
     def divided_by(self,other):
         if isinstance(other,Number):
             if other.value == 0:
@@ -303,6 +381,22 @@ class Context:
         self.display_name = display_name
         self.parent = parent
         self.parent_entry_pos = parent_entry_pos
+        self.symbol_table = None
+# Symbol Table
+class SymbolTable:
+    def __init__(self):
+        self.symbols = {}
+        self.parent = None
+    def get(self,name):
+        value =  self.symbols.get(name,None)
+        if value == None and self.parent:
+            return self.parent.get(name)
+        return value
+    def set(self,name,value):
+        self.symbols[name] = value
+    def remove(self,name):
+        del self.symbols[name]
+
 # Interpreter
 class Interpreter:
     def visit(self, node, context):
@@ -312,6 +406,24 @@ class Interpreter:
     
     def no_visit_method(self,node,context):
         raise Exception(f'No visit_{type(node).__name__} method defined')
+    def visit_VarAccessNode(self,node,context):
+        res = RTresult()
+        var_name = node.var_name_tok.value
+        value = context.symbol_table.get(var_name)
+
+        if not value:
+            return res.failure(RTError(node.pos_start, node.pos_end,f"'{var_name}' न विवक्षितम् | {var_name} na vivakshitam",context))
+        return res.success(value)
+    def visit_VarAssignNode(self,node,context):
+        res = RTresult()
+        var_name = node.var_name_tok.value
+        value = res.register(self.visit(node.value_node,context))
+        if res.error :
+            return res
+        context.symbol_table.set(var_name,value)
+        return res.success(value)
+    
+        
     
     def visit_NumberNode(self,node,context):
         return RTresult().success(Number(node.tok.value).set_context(context).set_pos(node.pos_start,node.pos_end))
@@ -331,6 +443,8 @@ class Interpreter:
             result,error = left.multiplied_by(right)
         elif node.op_tok.type == TT_DIV:
             result,error = left.divided_by(right)
+        elif node.op_tok.type == TT_POW:
+            result,error = left.to_power(right)
         if error:
             return res.failure(error)
         else:
@@ -348,11 +462,15 @@ class Interpreter:
             return res.failure(error)
         else:
             return res.success(number.set_pos(node.pos_start,node.pos_end))
-
+global_symbol_table = SymbolTable()
+global_symbol_table.set("null",Number(0))
     
 # Run
 def Run(text,file_name):
-    lexer = Lexer(file_name,text)
+    print(text)
+    converted_text = str(transliterate(text, sanscript.DEVANAGARI, sanscript.ITRANS))
+    print(converted_text)
+    lexer = Lexer(file_name,converted_text)
     tokens,error =  lexer.make_tokens()
     if error : return None,error
     parser = Parser(tokens)
@@ -361,5 +479,6 @@ def Run(text,file_name):
         return None,ast.error
     interpreter = Interpreter()
     context = Context('<कार्यक्रम> | <karyakram>')
+    context.symbol_table = global_symbol_table
     result = interpreter.visit(ast.node,context)
     return result.value,result.error

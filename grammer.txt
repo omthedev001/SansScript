@@ -1,3 +1,7 @@
 expr : term((PLUS|MINUS)term)
+       KEYWORD: CHARAH IDENTIFIER COLON expr
 term : factor((MULTIPLY|DIVIDE)factor)
-factor : INT/FLOAT
+factor : (PLUS|MINUS) factor
+power : atom (POW factor)
+atom : INT/FLOAT
+       LPAREN expr RPAREN
