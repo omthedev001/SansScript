@@ -15,9 +15,14 @@ TT_EOF = 'EOF'
 TT_POW = 'POW'
 TT_IDENTIFIER = 'IDENTIFIER'
 TT_KEYWORD = 'KEYWORD'
-TT_EQ = 'EQUAL'
+TT_EQ = 'EE'
+TT_NE = 'NE'
+TT_GT = 'GT'
+TT_LT = 'LT'
+TT_GTE = 'GTE'
+TT_LTE = 'LTE'
 
-KEYWORDS = ['charaH','charah']
+KEYWORDS = ['charaH','charah','tathA','tatha','vA','va','nahi']
 
 DIGITS_S = '०१२३४५६७८९'
 DIGITS = '0123456789'
@@ -141,6 +146,16 @@ class Lexer:
             elif self.current_char == '=':
                 tokens.append(Token(TT_EQ,pos_start=self.pos))
                 self.advance()
+            elif self.current_char == '!':
+                tok,error = self.make_not_equals()
+                if error:
+                    return [],None
+                tokens.append(tok)
+            elif self.current_char == '>':
+                tokens.append(self.make_more_than())
+            elif self.current_char == '<':
+                tokens.append(self.make_less_than())
+
             else:
                 pos_start = self.pos.copy()
                 character = self.current_char
@@ -184,6 +199,22 @@ class Lexer:
         
         tok_type = TT_KEYWORD if id_str in KEYWORDS else TT_IDENTIFIER
         return Token(tok_type,id_str,pos_start,self.pos)
+    def make_not_equals(self):
+        pos_start = self.pos.copy()
+        self.advance()
+        if self.current_char == '=':
+            self.advance()
+            return Token(TT_NE,pos_start=pos_start,pos_end=self.pos), None
+        self.advance()
+        # return None,ExpectedCharError(pos_start,self.pos," '=' अनन्तरम्‌ '!' | '=' anantaram '!'") 
+    def make_equals(self):
+        pos_start = self.pos.copy()
+        self.advance()
+        if self.current_char == '=':
+            self.advance()
+            # return Token(TT)
+        
+
 # Number 
 class NumberNode:
     def __init__(self, tok):
@@ -229,18 +260,23 @@ class ParseResult:
     def __init__(self):
         self.error = None
         self.node = None
+        self.advance_count = 0
+    def register_advancement(self):
+        self.advance_count +=1
     def register(self,res):
-        if isinstance(res,ParseResult):
-            if res.error:
-                self.error =  res.error
-            return res.node
-        return res
+        self.advance_count += res.advance_count
+        if res.error:
+            self.error =  res.error
+        return res.node
+        
     def success(self,node):
         self.node  = node
         return self
     def failure(self,error):
-        self.error = error
-        return self
+        print(self.advance_count)
+        if not self.error or self.advance_count ==0 :
+            self.error = error
+            return self
 # Parser 
 class Parser:
     def __init__(self,tokens):
@@ -261,28 +297,33 @@ class Parser:
         res = ParseResult()
         tok = self.current_token
         if tok.type in (TT_INT,TT_FLOAT):
-            res.register(self.advance())
+            res.register_advancement()
+            self.advance()
             return res.success(NumberNode(tok))
         elif tok.type == TT_IDENTIFIER:
-            res.register(self.advance())
+            res.register_advancement()
+            self.advance()
             return res.success(VarAccessNode(tok))
         elif tok.type ==  TT_LPAREN:
-            res.register(self.advance())
+            res.register_advancement()
+            self.advance()
             expr =  res.register(self.expr())
             if res.error: return res
             if self.current_token.type == TT_RPAREN:
-                res.register(self.advance())
+                res.register_advancement()
+                self.advance()
                 return res.success(expr)
             else:
                 return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,"अपेक्षितं ')' | apekchhit ')'"))
-        return res.failure(Invalid_Syntax_Error(tok.pos_start,tok.pos_end,'अपेक्षितं INT,FLOAT,+,-, अथवा ( | apekchhit INT,FLOAT,+,-, athva ('))
+        return res.failure(Invalid_Syntax_Error(tok.pos_start,tok.pos_end,'अपेक्षितं INT,FLOAT,+,-,परिचयकः अथवा ( | apekchhit INT,FLOAT,+,-,parichayakah athva ('))
     def power(self):
         return self.bin_op(self.atom,(TT_POW, ), self.factor)
     def factor(self):
         res = ParseResult()
         tok = self.current_token
         if tok.type in (TT_PLUS,TT_MINUS):
-            res.register(self.advance())
+            res.register_advancement()
+            self.advance()
             factor = res.register(self.factor())
             if res.error : return res
             return res.success(UnaryOpNode(tok,factor))
@@ -293,22 +334,28 @@ class Parser:
     def expr(self):
         res  = ParseResult()
         if self.current_token.matches(TT_KEYWORD,'charaH') or self.current_token.matches(TT_KEYWORD,'charah'):
-            res.register(self.advance())
+            res.register_advancement()
+            self.advance()
             print(self.current_token)
             if self.current_token.type != TT_IDENTIFIER:
                 return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,'अपेक्षितं परिचयकः | apekchhit parichayakah'))
             var_name = self.current_token
-            res.register(self.advance())
+            res.register_advancement()
+            self.advance()
             print(self.current_token)
             if self.current_token.type != TT_EQ:
                 return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,"अपेक्षितं ':' | apekchhit ':")) 
-            res.register(self.advance())
+            res.register_advancement()
+            self.advance()
 
             expr = res.register(self.expr())
             if res.error: 
                 return res  
             return res.success(VarAssignNode(var_name,expr))                     
-        return self.bin_op(self.term,(TT_MINUS,TT_PLUS))    
+        node =  res.register(self.bin_op(self.term,(TT_MINUS,TT_PLUS)))
+        if res.error:
+            return res.failure(Invalid_Syntax_Error(self.current_token.pos_start, self.current_token.pos_end,'अपेक्षितं INT,FLOAT,+,-,परिचयकः अथवा ( | apekchhit charah ,INT,FLOAT,+,-,parichayakah athva ('))
+        return res.success(node) 
     def bin_op(self,func_a,ops,func_b=None):
         res  = ParseResult()
         if func_b == None:
@@ -318,7 +365,8 @@ class Parser:
         # self.advance()
         while self.current_token.type in ops:
             op_tok = self.current_token
-            res.register(self.advance())
+            res.register_advancement()
+            self.advance()
             right = res.register(func_b())
             if res.error : return res 
             left = BinaryOpNode(left,op_tok,right)
@@ -361,6 +409,11 @@ class Number:
     def multiplied_by(self,other):
         if isinstance(other,Number):
             return Number(self.value * other.value).set_context(self.context),None
+    def copy(self):
+        copy = Number(self.value)
+        copy.set_pos(self.pos_start,self.pos_end)
+        copy.set_context(self.context)
+        return copy
     def to_power(self,other):
         if isinstance(other,Number):
             return Number(self.value ** other.value).set_context(self.context),None
@@ -413,6 +466,7 @@ class Interpreter:
 
         if not value:
             return res.failure(RTError(node.pos_start, node.pos_end,f"'{var_name}' न विवक्षितम् | {var_name} na vivakshitam",context))
+        value = value.copy().set_pos(node.pos_start,node.pos_end)
         return res.success(value)
     def visit_VarAssignNode(self,node,context):
         res = RTresult()
