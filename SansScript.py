@@ -15,13 +15,13 @@ TT_EOF = 'EOF'
 TT_POW = 'POW'
 TT_IDENTIFIER = 'IDENTIFIER'
 TT_KEYWORD = 'KEYWORD'
-TT_EQ = 'EE'
+TT_EQ = 'EQ'
 TT_NE = 'NE'
 TT_GT = 'GT'
 TT_LT = 'LT'
 TT_GTE = 'GTE'
 TT_LTE = 'LTE'
-
+TT_EE = 'EE'
 KEYWORDS = ['charaH','charah','tathA','tatha','vA','va','nahi']
 
 DIGITS_S = '०१२३४५६७८९'
@@ -46,6 +46,9 @@ class Illegal_Character_Error(Error):
 class Invalid_Syntax_Error(Error):
     def __init__(self,pos_start,pos_end,details = ''):
         super().__init__(pos_start,pos_end,'अवैध वाक्यविन्यासः | avaidh vakyavinyasyah', details)
+class Expected_Char_Error(Error):
+    def __init__(self,pos_start,pos_end,details = ''):
+        super().__init__(pos_start,pos_end,'अवैध वाक्यविन्यासः | avaidh vakyavinyasyah', details)        
 class RTError(Error):
     def __init__(self,pos_start,pos_end,details,context):
         super().__init__(pos_start,pos_end,'रनटाइम् त्रुटिः | runtime trutih', details)
@@ -96,8 +99,11 @@ class Token:
             self.pos_end.advance()
         if pos_end:
             self.pos_end = pos_end.copy()
-    def matches(self,type_,value):
-        return self.type == type_ and self.value == value
+    def matches(self,type_,value_a,value_b = None):
+        if value_b:
+            return self.type == type_ and self.value == value_a or value_b
+        else:            
+            return self.type == type_ and self.value == value_a
     def __repr__(self):
         if self.value:
             return f"{self.type}:{self.value}"
@@ -144,15 +150,14 @@ class Lexer:
                 tokens.append(Token(TT_POW,pos_start=self.pos))
                 self.advance()
             elif self.current_char == '=':
-                tokens.append(Token(TT_EQ,pos_start=self.pos))
-                self.advance()
+                tokens.append(self.make_equals())
             elif self.current_char == '!':
                 tok,error = self.make_not_equals()
                 if error:
                     return [],None
                 tokens.append(tok)
             elif self.current_char == '>':
-                tokens.append(self.make_more_than())
+                tokens.append(self.make_greater_than())
             elif self.current_char == '<':
                 tokens.append(self.make_less_than())
 
@@ -206,13 +211,31 @@ class Lexer:
             self.advance()
             return Token(TT_NE,pos_start=pos_start,pos_end=self.pos), None
         self.advance()
-        # return None,ExpectedCharError(pos_start,self.pos," '=' अनन्तरम्‌ '!' | '=' anantaram '!'") 
+        return None,Expected_Char_Error(pos_start,self.pos," '=' अनन्तरम्‌ '!' | '=' anantaram '!'") 
     def make_equals(self):
         pos_start = self.pos.copy()
+        tok_type = TT_EQ
         self.advance()
         if self.current_char == '=':
             self.advance()
-            # return Token(TT)
+            tok_type = TT_EE
+        return Token(tok_type,pos_start=pos_start,pos_end=self.pos)
+    def make_greater_than(self):
+        pos_start = self.pos.copy()
+        tok_type = TT_GT
+        self.advance()
+        if self.current_char == '=':
+            self.advance()
+            tok_type = TT_GTE
+        return Token(tok_type,pos_start=pos_start,pos_end=self.pos)
+    def make_less_than(self):
+        pos_start = self.pos.copy()
+        tok_type = TT_LT
+        self.advance()
+        if self.current_char == '=':
+            self.advance()
+            tok_type = TT_LTE
+        return Token(tok_type,pos_start=pos_start,pos_end=self.pos)
         
 
 # Number 
@@ -273,7 +296,7 @@ class ParseResult:
         self.node  = node
         return self
     def failure(self,error):
-        print(self.advance_count)
+        # print(self.advance_count)
         if not self.error or self.advance_count ==0 :
             self.error = error
             return self
@@ -331,6 +354,21 @@ class Parser:
         return self.power()
     def term(self):
         return self.bin_op(self.factor,(TT_MUL,TT_DIV))
+    def arith_expr(self):
+        return self.bin_op(self.term,(TT_PLUS,TT_MINUS))
+    def comp_expr(self):
+        res = ParseResult()
+        if self.current_token.matches(TT_KEYWORD, 'nahi'):
+            res.register_advancement()
+            self.advance()
+            node = res.register(self.comp_expr)
+            if res.error:
+                return res
+            return res.success(UnaryOpNode(self.current_token,node))
+        node = res.register(self.bin_op(self.arith_expr,(TT_EE,TT_NE,TT_LT,TT_GT,TT_LTE,TT_GTE)))
+        if res.error:
+            return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,"अपेक्षितं INT,FLOAT,+,-,परिचयकः अथवा ( | apekchhit INT,FLOAT,+,-,nahi parichayakah athva ("))
+        return res.success(node)
     def expr(self):
         res  = ParseResult()
         if self.current_token.matches(TT_KEYWORD,'charaH') or self.current_token.matches(TT_KEYWORD,'charah'):
@@ -344,7 +382,7 @@ class Parser:
             self.advance()
             print(self.current_token)
             if self.current_token.type != TT_EQ:
-                return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,"अपेक्षितं ':' | apekchhit ':")) 
+                return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,"अपेक्षितं '=' | apekchhit '=")) 
             res.register_advancement()
             self.advance()
 
@@ -352,9 +390,9 @@ class Parser:
             if res.error: 
                 return res  
             return res.success(VarAssignNode(var_name,expr))                     
-        node =  res.register(self.bin_op(self.term,(TT_MINUS,TT_PLUS)))
+        node =  res.register(self.bin_op(self.comp_expr,((TT_KEYWORD,'tathA'),(TT_KEYWORD,'tatha'),(TT_KEYWORD,'vA'),(TT_KEYWORD,'va'))))
         if res.error:
-            return res.failure(Invalid_Syntax_Error(self.current_token.pos_start, self.current_token.pos_end,'अपेक्षितं INT,FLOAT,+,-,परिचयकः अथवा ( | apekchhit charah ,INT,FLOAT,+,-,parichayakah athva ('))
+            return res.failure(Invalid_Syntax_Error(self.current_token.pos_start, self.current_token.pos_end,'अपेक्षितं INT,FLOAT,+,-,परिचयकः अथवा ( | apekchhit charah ,INT,FLOAT,+,-,nahi,parichayakah athva ('))
         return res.success(node) 
     def bin_op(self,func_a,ops,func_b=None):
         res  = ParseResult()
@@ -363,7 +401,7 @@ class Parser:
         left = res.register(func_a())
         if res.error:return res
         # self.advance()
-        while self.current_token.type in ops:
+        while self.current_token.type in ops or (self.current_token.type,self.current_token.value) in ops:
             op_tok = self.current_token
             res.register_advancement()
             self.advance()
@@ -426,6 +464,32 @@ class Number:
                     self.context
                 )
             return Number(self.value / other.value).set_context(self.context),None
+    def get_comp_eq(self,other):
+        if isinstance(other,Number):
+            return Number(int(self.value == other.value)).set_context(self.context),None
+    def get_comp_ne(self,other):
+        if isinstance(other,Number):
+            return Number(int(self.value != other.value)).set_context(self.context),None
+    def get_comp_lt(self,other):
+        if isinstance(other,Number):
+            return Number(int(self.value < other.value)).set_context(self.context),None
+    def get_comp_gt(self,other):
+        if isinstance(other,Number):
+            return Number(int(self.value > other.value)).set_context(self.context),None
+    def get_comp_gte(self,other):
+        if isinstance(other,Number):
+            return Number(int(self.value >= other.value)).set_context(self.context),None
+    def get_comp_lte(self,other):
+        if isinstance(other,Number):
+            return Number(int(self.value <= other.value)).set_context(self.context),None
+    def anded_by(self,other):
+        if isinstance(other,Number):
+            return Number(int(self.value and other.value)).set_context(self.context),None
+    def ored_by(self,other):
+        if isinstance(other,Number):
+            return Number(int(self.value or other.value)).set_context(self.context),None
+    def notted(self):
+        return Number(int(1 if self.value == 0 else 0)).set_context(self.context),None
     def __repr__(self):
         return str(self.value)
 # Context 
@@ -489,6 +553,7 @@ class Interpreter:
         right = res.register(self.visit(node.right_node,context))
         if res.error:return res
 
+        result,error = None,None
         if node.op_tok.type == TT_PLUS:
             result,error = left.added_to(right)
         elif node.op_tok.type == TT_MINUS:
@@ -499,6 +564,22 @@ class Interpreter:
             result,error = left.divided_by(right)
         elif node.op_tok.type == TT_POW:
             result,error = left.to_power(right)
+        elif node.op_tok.type == TT_EE:
+            result,error = left.get_comp_eq(right)
+        elif node.op_tok.type == TT_NE:
+            result,error = left.get_comp_ne(right)
+        elif node.op_tok.type == TT_LT:
+            result,error = left.get_comp_lt(right)
+        elif node.op_tok.type == TT_GT:
+            result,error = left.get_comp_gt(right)
+        elif node.op_tok.type == TT_LTE:
+            result,error = left.get_comp_lte(right)
+        elif node.op_tok.type == TT_GTE:
+            result,error = left.get_comp_gte(right)
+        elif node.op_tok.matches(TT_KEYWORD,'tatha','tathA'):
+            result,error = left.anded_by(right)
+        elif node.op_tok.matches(TT_KEYWORD,'va','vA'):
+            result,error = left.ored_by(right)
         if error:
             return res.failure(error)
         else:
@@ -512,6 +593,8 @@ class Interpreter:
         error = None
         if node.op_tok.type ==  TT_MINUS:
             number,error =  number.multiplied_by(Number(-1))
+        elif node.op_tok.matches(TT_IDENTIFIER,'nahi'):
+            number,error = number.notted()
         if error:
             return res.failure(error)
         else:
