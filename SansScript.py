@@ -340,6 +340,7 @@ class Parser:
         res.register_advancement()
         self.advance()
         expr = res.register(self.expr())
+        print(expr)
         if res.error : 
             return res
         cases.append((condition,expr))
@@ -347,13 +348,17 @@ class Parser:
             res.register_advancement()
             self.advance()
             condition = res.register(self.expr())
+            print(self.current_token)
             if res.error:
                 return res
             if not self.current_token.matches(TT_KEYWORD,':'):
                 return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,"अपेक्षितं ':'"))
+            
             res.register_advancement()
             self.advance()
+            print(self.current_token)
             expr = res.register(self.expr())
+            print(expr)
             if res.error:
                 return res
             cases.append((condition,expr))
@@ -369,6 +374,7 @@ class Parser:
             if res.error:
                 return res
             else_case = expr
+        print(cases)
         return res.success(ifNode(cases,else_case)) 
             
 
@@ -589,8 +595,12 @@ class Interpreter:
         raise Exception(f'No visit_{type(node).__name__} method defined')
     def visit_ifNode(self,node,context):
         res = RTresult()
+        i = 0
         for condition,expr in node.cases:
+            i+=1
+            print(len(node.cases))
             condition_value = res.register(self.visit(condition,context))
+            print(condition_value)
             if res.error:
                 return res
             if condition_value.is_true():
@@ -598,12 +608,13 @@ class Interpreter:
                 if res.error:
                     return res
                 return res.success(expr_value)
-            if node.else_case:
-                else_value = res.register(self.visit(node.else_case,context))
-                if res.error:
-                    return res
-                return res.success(else_value)
-            return res.success(None)
+        if node.else_case:
+            else_value = res.register(self.visit(node.else_case,context))
+            if res.error:
+                return res
+            return res.success(else_value)
+        return res.success(None)
+        
 
     def visit_VarAccessNode(self,node,context):
         res = RTresult()
