@@ -22,12 +22,12 @@ TT_LT = 'LT'
 TT_GTE = 'GTE'
 TT_LTE = 'LTE'
 TT_EE = 'EE'
-KEYWORDS = ['charaH','charah','tathA','tatha','vA','va','nahi']
+KEYWORDS = ['charaH','charah','tathA','tatha','vA','va','nahi','yadi',':','anyadi','uta']
 
 DIGITS_S = '०१२३४५६७८९'
 DIGITS = '0123456789'
 LETTERS = string.ascii_letters
-LETTERS_DIGITS = LETTERS + DIGITS
+LETTERS_DIGITS = LETTERS + DIGITS + ':'
 # Error
 class Error:
     def __init__(self,pos_start,pos_end,err_name,details):
@@ -160,7 +160,8 @@ class Lexer:
                 tokens.append(self.make_greater_than())
             elif self.current_char == '<':
                 tokens.append(self.make_less_than())
-
+            elif self.current_char == ':':
+                tokens.append(self.make_identifier())
             else:
                 pos_start = self.pos.copy()
                 character = self.current_char
@@ -197,7 +198,7 @@ class Lexer:
     def make_identifier(self):
         id_str = ''
         pos_start = self.pos.copy()
-
+        # print(self.current_char)
         while self.current_char != None and self.current_char in LETTERS_DIGITS + '_':
             id_str += self.current_char
             self.advance()
@@ -276,7 +277,13 @@ class VarAssignNode:
 
         self.pos_start = self.var_name_tok.pos_start
         self.pos_end = self.value_node.pos_end
+class ifNode:
+    def __init__(self,cases,else_case):
+        self.cases = cases
+        self.else_case = else_case
 
+        self.pos_start =  cases[0][0].pos_start
+        self.pos_end = (self.else_case or self.cases[len(self.cases)-1][0]).pos_end
 
 # Parse Result
 class ParseResult:
@@ -316,6 +323,56 @@ class Parser:
         if self.tok_index < len(self.tokens):
             self.current_token = self.tokens[self.tok_index]
         return self.current_token
+    def if_expr(self):
+        res = ParseResult()
+        cases = []
+        else_case = None
+
+        if not self.current_token.matches(TT_KEYWORD,'yadi'):
+            return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,"अपेक्षितं 'yadi' | apekchhit 'yadi'"))
+        res.register_advancement()
+        self.advance()
+        condition = res.register(self.expr())
+        if res.error:
+            return res
+        if not self.current_token.matches(TT_KEYWORD,':'):
+            return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,"अपेक्षितं ':'"))
+        res.register_advancement()
+        self.advance()
+        expr = res.register(self.expr())
+        if res.error : 
+            return res
+        cases.append((condition,expr))
+        while self.current_token.matches(TT_KEYWORD,'anyadi'):
+            res.register_advancement()
+            self.advance()
+            condition = res.register(self.expr())
+            if res.error:
+                return res
+            if not self.current_token.matches(TT_KEYWORD,':'):
+                return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,"अपेक्षितं ':'"))
+            res.register_advancement()
+            self.advance()
+            expr = res.register(self.expr())
+            if res.error:
+                return res
+            cases.append((condition,expr))
+        if self.current_token.matches(TT_KEYWORD,'uta'):
+            res.register_advancement()
+            self.advance()
+
+            if not self.current_token.matches(TT_KEYWORD,':'):
+                return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,"अपेक्षितं ':'"))
+            res.register_advancement()
+            self.advance()
+            expr = res.register(self.expr())
+            if res.error:
+                return res
+            else_case = expr
+        return res.success(ifNode(cases,else_case)) 
+            
+
+        
     def atom(self):
         res = ParseResult()
         tok = self.current_token
@@ -338,6 +395,10 @@ class Parser:
                 return res.success(expr)
             else:
                 return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,"अपेक्षितं ')' | apekchhit ')'"))
+        elif tok.matches(TT_KEYWORD,'yadi'):
+            if_expr = res.register(self.if_expr())
+            if res.error : return res
+            return res.success(if_expr)
         return res.failure(Invalid_Syntax_Error(tok.pos_start,tok.pos_end,'अपेक्षितं INT,FLOAT,+,-,परिचयकः अथवा ( | apekchhit INT,FLOAT,+,-,parichayakah athva ('))
     def power(self):
         return self.bin_op(self.atom,(TT_POW, ), self.factor)
@@ -359,12 +420,13 @@ class Parser:
     def comp_expr(self):
         res = ParseResult()
         if self.current_token.matches(TT_KEYWORD, 'nahi'):
+            op_tok  = self.current_token
             res.register_advancement()
             self.advance()
             node = res.register(self.comp_expr())
             if res.error:
                 return res
-            return res.success(UnaryOpNode(self.current_token,node))
+            return res.success(UnaryOpNode(op_tok,node))
         node = res.register(self.bin_op(self.arith_expr,(TT_EE,TT_NE,TT_LT,TT_GT,TT_LTE,TT_GTE)))
         if res.error:
             return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,"अपेक्षितं INT,FLOAT,+,-,परिचयकः अथवा ( | apekchhit INT,FLOAT,+,-,nahi parichayakah athva ("))
@@ -490,6 +552,8 @@ class Number:
             return Number(int(self.value or other.value)).set_context(self.context),None
     def notted(self):
         return Number(int(1 if self.value == 0 else 0)).set_context(self.context),None
+    def is_true(self):
+        return self.value != 0
     def __repr__(self):
         return str(self.value)
 # Context 
@@ -523,6 +587,24 @@ class Interpreter:
     
     def no_visit_method(self,node,context):
         raise Exception(f'No visit_{type(node).__name__} method defined')
+    def visit_ifNode(self,node,context):
+        res = RTresult()
+        for condition,expr in node.cases:
+            condition_value = res.register(self.visit(condition,context))
+            if res.error:
+                return res
+            if condition_value.is_true():
+                expr_value = res.register(self.visit(expr,context))
+                if res.error:
+                    return res
+                return res.success(expr_value)
+            if node.else_case:
+                else_value = res.register(self.visit(node.else_case,context))
+                if res.error:
+                    return res
+                return res.success(else_value)
+            return res.success(None)
+
     def visit_VarAccessNode(self,node,context):
         res = RTresult()
         var_name = node.var_name_tok.value
