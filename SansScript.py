@@ -361,7 +361,7 @@ class Parser:
         if self.current_token.matches(TT_KEYWORD, 'nahi'):
             res.register_advancement()
             self.advance()
-            node = res.register(self.comp_expr)
+            node = res.register(self.comp_expr())
             if res.error:
                 return res
             return res.success(UnaryOpNode(self.current_token,node))
@@ -593,7 +593,7 @@ class Interpreter:
         error = None
         if node.op_tok.type ==  TT_MINUS:
             number,error =  number.multiplied_by(Number(-1))
-        elif node.op_tok.matches(TT_IDENTIFIER,'nahi'):
+        elif node.op_tok.matches(TT_KEYWORD,'nahi'):
             number,error = number.notted()
         if error:
             return res.failure(error)
