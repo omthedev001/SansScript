@@ -22,7 +22,10 @@ TT_LT = 'LT'
 TT_GTE = 'GTE'
 TT_LTE = 'LTE'
 TT_EE = 'EE'
-KEYWORDS = ['charaH','charah','tathA','tatha','vA','va','nahi','yadi',':','anyadi','uta']
+TT_LSQUARE = 'LSQUARE'
+TT_RSQUARE = 'RSQUARE'
+TT_COMMA = 'COMMA'
+KEYWORDS = ['charaH','charah','tathA','tatha','vA','va','nahi','yadi',':','anyadi','uta','kRRite','kritte','ityasmin','sopAnaH','sopanah','yAvad','yavad','gaNaH','ganah']
 
 DIGITS_S = '०१२३४५६७८९'
 DIGITS = '0123456789'
@@ -162,6 +165,15 @@ class Lexer:
                 tokens.append(self.make_less_than())
             elif self.current_char == ':':
                 tokens.append(self.make_identifier())
+            elif self.current_char == '[':
+                tokens.append(Token(TT_LSQUARE,pos_start=self.pos))
+                self.advance()
+            elif self.current_char == ']':
+                tokens.append(Token(TT_RSQUARE,pos_start=self.pos))
+                self.advance()
+            elif self.current_char == ',':
+                tokens.append(Token(TT_COMMA,pos_start=self.pos))
+                self.advance()
             else:
                 pos_start = self.pos.copy()
                 character = self.current_char
@@ -284,6 +296,9 @@ class ifNode:
 
         self.pos_start =  cases[0][0].pos_start
         self.pos_end = (self.else_case or self.cases[len(self.cases)-1][0]).pos_end
+class ListNode:
+    def __init__(self):
+        self.element_nodes
 
 # Parse Result
 class ParseResult:
