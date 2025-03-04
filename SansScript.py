@@ -406,7 +406,7 @@ class Parser:
             else_case = expr
         print(cases)
         return res.success(ifNode(cases,else_case)) 
-    def if_expr(self):
+    def for_expr(self):
         res  = ParseResult()
         pos_start = self.current_token.pos_start
 
