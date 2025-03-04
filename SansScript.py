@@ -296,9 +296,24 @@ class ifNode:
 
         self.pos_start =  cases[0][0].pos_start
         self.pos_end = (self.else_case or self.cases[len(self.cases)-1][0]).pos_end
+class forNode:
+    def __init__(self,var_name_tok,arg_nodes):
+        self.var_name_tok = var_name_tok
+        self.var_name_tok = var_name_tok
+        self.pos_start = self.var_name_tok.pos_start
+        self.pos_end = self.var_name_tok.pos_end
 class ListNode:
-    def __init__(self):
-        self.element_nodes
+    def __init__(self,element_nodes):
+        self.element_nodes = element_nodes
+        self.pos_start = element_nodes[0].pos_start if element_nodes else None
+        self.pos_start = element_nodes[-1].pos_end if element_nodes else None
+class WhileNode:
+    def __init__(self,condition_node,body_node):
+        self.condition_node = condition_node
+        self.body_node = body_node
+
+        self.pos_start = self.condition_node.pos_start
+        self.pos_end = self.body_node.pos_end
 
 # Parse Result
 class ParseResult:
@@ -391,8 +406,23 @@ class Parser:
             else_case = expr
         print(cases)
         return res.success(ifNode(cases,else_case)) 
-            
+    def if_expr(self):
+        res  = ParseResult()
+        pos_start = self.current_token.pos_start
 
+        if not self.current_token.matches(TT_KEYWORD,'kRRite') or not self.current_token.matches(TT_KEYWORD,'krrite'):
+            return res.failure(Expected_Char_Error(self.current_token.pos_start,self.current_token.pos_end,"apekchhit 'krrite'"))
+        res.register_advancement()
+        self.advance()
+        if not self.current_token.type == TT_IDENTIFIER:
+            return res.failure(Expected_Char_Error(self.current_token.pos_start,self.current_token.pos_end,"apekchhit 'Identifier'"))
+        var_name = self.current_token
+        res.register_advancement()
+        self.advance()
+        if not self.current_token.matches(TT_KEYWORD, 'ityasmin'):
+            return res.failure(Expected_Char_Error(self.current_token.pos_start,self.current_token.pos_end,"apekchhit 'ityasmin'"))
+        
+        
         
     def atom(self):
         res = ParseResult()
@@ -420,6 +450,16 @@ class Parser:
             if_expr = res.register(self.if_expr())
             if res.error : return res
             return res.success(if_expr)
+        elif tok.matches(TT_KEYWORD,'kRRite') or tok.matches(TT_KEYWORD,'kritte'):
+            for_expr = res.register(self.for_expr())
+            if res.error:
+                return res
+            return res.success(for_expr)
+        elif tok.matches(TT_KEYWORD,'sopAnaH') or tok.matches(TT_KEYWORD,'sopanah'):
+            while_expr = res.register(self.while_expr())
+            if res.error:
+                return res
+            return res.success(while_expr)
         return res.failure(Invalid_Syntax_Error(tok.pos_start,tok.pos_end,'अपेक्षितं INT,FLOAT,+,-,परिचयकः अथवा ( | apekchhit INT,FLOAT,+,-,parichayakah athva ('))
     def power(self):
         return self.bin_op(self.atom,(TT_POW, ), self.factor)
