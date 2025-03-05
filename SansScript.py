@@ -25,7 +25,7 @@ TT_EE = 'EE'
 TT_LSQUARE = 'LSQUARE'
 TT_RSQUARE = 'RSQUARE'
 TT_COMMA = 'COMMA'
-KEYWORDS = ['charaH','charah','tathA','tatha','vA','va','nahi','yadi',':','anyadi','uta','kRRite','kritte','ityasmin','sopAnaH','sopanah','yAvad','yavad','gaNaH','ganah']
+KEYWORDS = ['charaH','charah','tathA','tatha','vA','va','nahi','yadi',':','anyadi','uta','kRRite','krrite','ityasmai','charaNa','charana','yAvad','yavad'] 
 
 DIGITS_S = '०१२३४५६७८९'
 DIGITS = '0123456789'
@@ -296,22 +296,19 @@ class ifNode:
 
         self.pos_start =  cases[0][0].pos_start
         self.pos_end = (self.else_case or self.cases[len(self.cases)-1][0]).pos_end
-class forNode:
-    def __init__(self,var_name_tok,arg_nodes):
+class ForNode:
+    def __init__(self,var_name_tok,start_node,end_node,step_node,body_node):
         self.var_name_tok = var_name_tok
-        self.var_name_tok = var_name_tok
-        self.pos_start = self.var_name_tok.pos_start
-        self.pos_end = self.var_name_tok.pos_end
-class ListNode:
-    def __init__(self,element_nodes):
-        self.element_nodes = element_nodes
-        self.pos_start = element_nodes[0].pos_start if element_nodes else None
-        self.pos_start = element_nodes[-1].pos_end if element_nodes else None
+        self.start_node = start_node
+        self.end_node = end_node
+        self.step_node = step_node
+        self.body_node = body_node
+        self.pos_end = self.var_name_tok.pos_start
+        self.pos_end = self.body_node.pos_end
 class WhileNode:
     def __init__(self,condition_node,body_node):
         self.condition_node = condition_node
         self.body_node = body_node
-
         self.pos_start = self.condition_node.pos_start
         self.pos_end = self.body_node.pos_end
 
@@ -406,7 +403,7 @@ class Parser:
             else_case = expr
         print(cases)
         return res.success(ifNode(cases,else_case)) 
-    def for_expr(self):
+    def if_expr(self):
         res  = ParseResult()
         pos_start = self.current_token.pos_start
 
@@ -421,7 +418,65 @@ class Parser:
         self.advance()
         if not self.current_token.matches(TT_KEYWORD, 'ityasmin'):
             return res.failure(Expected_Char_Error(self.current_token.pos_start,self.current_token.pos_end,"apekchhit 'ityasmin'"))
-        
+    def for_expr(self):
+        res = ParseResult()
+        if not self.current_token.matches(TT_KEYWORD,'kRRite') or not self.current_token.matches(TT_KEYWORD,'krrite'):
+            return res.failure(Expected_Char_Error(self.current_token.pos_start,self.current_token.pos_end,"apekchhit 'krrite'"))
+        res.register_advancement()
+        self.advance()
+        if not self.current_token.type == TT_IDENTIFIER:
+            return res.failure(Expected_Char_Error(self.current_token.pos_start,self.current_token.pos_end,"apekchhit 'Identifier'"))
+        var_name = self.current_token
+        res.register_advancement()
+        self.advance()
+        if not self.current_token.type == TT_EQ:
+            return res.failure(Expected_Char_Error(self.current_token.pos_start,self.current_token.pos_end,"apekchhit '='"))
+        res.register_advancement()
+        self.advance()
+        start_value = res.register(self.expr())
+        if res.error:
+            return res
+        if not self.current_token.matches(TT_KEYWORD, 'ityasmai'):
+            return res.failure(Expected_Char_Error(self.current_token.pos_start,self.current_token.pos_end,"apekchhit 'ityasmai'"))
+        res.register_advancement()
+        self.advance()
+        end_value = res.register(self.expr())
+        if res.error:
+            return res
+        if self.current_token.matches((TT_KEYWORD,'charaNa') or (TT_KEYWORD,'charana')):
+            res.register_advancement()
+            self.advance()
+            step_value = res.register(self.expr())
+            if res.error:
+                return res
+        else:
+            step_value = None
+        if not self.current_token.matches(TT_KEYWORD,':'):
+            return res.failure(Expected_Char_Error(self.current_token.pos_start,self.current_token.pos_end,"apekchhit ':'"))
+        res.register_advancement()
+        self.advance()
+        body = res.register(self.expr())
+        if res.error:
+            return res
+        return res.success(ForNode(var_name,start_value,end_value,step_value,body))
+    def while_expr(self):
+        res = ParseResult()
+        if not self.current_token.matches(TT_KEYWORD,'sopAnaH') or not self.current_token.matches(TT_KEYWORD,'sopanah'):
+            return res.failure(Expected_Char_Error(self.current_token.pos_start,self.current_token.pos_end,"apekchhit 'sopanah'"))
+        res.register_advancement()
+        self.advance()
+        condition = res.register(self.expr())
+        if res.error:
+            return res
+        if not self.current_token.matches(TT_KEYWORD,':'):
+            return res.failure(Expected_Char_Error(self.current_token.pos_start,self.current_token.pos_end,"apekchhit ':'"))
+        res.register_advancement()
+        self.advance()
+        body = res.register(self.expr())
+        if res.error:
+            return res
+        return res.success(WhileNode(condition,body))
+
         
         
     def atom(self):
@@ -450,7 +505,7 @@ class Parser:
             if_expr = res.register(self.if_expr())
             if res.error : return res
             return res.success(if_expr)
-        elif tok.matches(TT_KEYWORD,'kRRite') or tok.matches(TT_KEYWORD,'kritte'):
+        elif tok.matches((TT_KEYWORD,'kRRite') or (TT_KEYWORD,'krrite')):
             for_expr = res.register(self.for_expr())
             if res.error:
                 return res
