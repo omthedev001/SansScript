@@ -2,7 +2,7 @@ from indic_transliteration import sanscript
 from indic_transliteration.sanscript import transliterate
 
 # Devanagari text
-devnagari_text = "यावद्‌"
+devnagari_text = "नियोग"
 
 # Transliterate Devanagari to English (IAST format)
 english_text = str(transliterate(devnagari_text, sanscript.DEVANAGARI, sanscript.ITRANS))
