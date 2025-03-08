@@ -5,5 +5,7 @@ from indic_transliteration.sanscript import transliterate
 devnagari_text = "नियोग"
 
 # Transliterate Devanagari to English (IAST format)
-english_text = str(transliterate(devnagari_text, sanscript.DEVANAGARI, sanscript.ITRANS))
+english_text = str(
+    transliterate(devnagari_text, sanscript.DEVANAGARI, sanscript.ITRANS)
+)
 print(english_text)  # Output: krishhNa
