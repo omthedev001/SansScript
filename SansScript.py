@@ -5,6 +5,8 @@ from indic_transliteration.sanscript import transliterate
 
 TT_INT = "INT"
 TT_FLOAT = "FLOAT"
+TT_STRING_S = "STRING_S"
+TT_STRING_D = "STRING_D"
 TT_PLUS = "PLUS"
 TT_MINUS = "MINUS"
 TT_MUL = "MUL"
@@ -232,6 +234,12 @@ class Lexer:
             elif self.current_char == ",":
                 tokens.append(Token(TT_COMMA, pos_start=self.pos))
                 self.advance()
+            elif self.current_char == "'":
+                tokens.append(self.make_string())
+                self.advance()
+            elif self.current_char == '"':
+                tokens.append(self.make_string())
+                self.advance()
             else:
                 pos_start = self.pos.copy()
                 character = self.current_char
@@ -242,6 +250,53 @@ class Lexer:
         tokens.append(Token(TT_EOF, pos_start=self.pos))
         print(tokens)
         return tokens, None  # Return tokens and no error
+
+    def make_string(self):
+        string_ = ""
+        pos_start = self.pos.copy()
+        str_type = self.current_char
+        escape_character = False
+        escape_characters = {
+            "n": "\n",
+            "t": "\t",
+        }
+        self.advance()
+        if str_type == "'":
+            while self.current_char != None and (
+                self.current_char != "'" or escape_character
+            ):
+                if escape_character:
+                    string_ += escape_characters.get(
+                        self.current_char, self.current_char
+                    )
+                else:
+                    if self.current_char == "\\":
+                        escape_character = True
+                    else:
+                        string_ += self.current_char
+                self.advance()
+                escape_character = False
+            self.advance()
+
+            return Token(TT_STRING_S, string_, pos_start, self.pos)
+        elif str_type == '"':
+            while self.current_char != None and (
+                self.current_char != '"' or escape_character
+            ):
+                if escape_character:
+                    string_ += escape_characters.get(
+                        self.current_char, self.current_char
+                    )
+                else:
+                    if self.current_char == "\\":
+                        escape_character = True
+                    else:
+                        string_ += self.current_char
+
+                self.advance()
+                escape_character = False
+            self.advance()
+            return Token(TT_STRING_D, string_, pos_start, self.pos)
 
     def make_number(self):
         # print("Make Number was called")
@@ -324,6 +379,16 @@ class Lexer:
 
 # Number
 class NumberNode:
+    def __init__(self, tok):
+        self.tok = tok
+        self.pos_start = self.tok.pos_start
+        self.pos_end = self.tok.pos_end
+
+    def __repr__(self):
+        return f"{self.tok}"
+
+
+class StringNode:
     def __init__(self, tok):
         self.tok = tok
         self.pos_start = self.tok.pos_start
@@ -820,6 +885,10 @@ class Parser:
             res.register_advancement()
             self.advance()
             return res.success(NumberNode(tok))
+        if tok.type in (TT_STRING_S, TT_STRING_D):
+            res.register_advancement()
+            self.advance()
+            return res.success(StringNode(tok))
         elif tok.type == TT_IDENTIFIER:
             res.register_advancement()
             self.advance()
@@ -1229,6 +1298,50 @@ class Number(Value):
         return str(self.value)
 
 
+class String(Value):
+    def __init__(self, value, type):
+        super().__init__()
+        self.value = value
+        self.type = type
+
+    def added_to(self, other):
+        if isinstance(other, String):
+            return (
+                String(self.value + str(other.value), TT_STRING_D).set_context(
+                    self.context
+                ),
+                None,
+            )
+        else:
+            return None, Value.illegal_operation(self, other)
+
+    def multiplied_by(self, other):
+        if isinstance(other, Number):
+            return (
+                String(self.value * other.value, TT_STRING_D).set_context(self.context),
+                None,
+            )
+        else:
+            return None, Value.illegal_operation(self, other)
+
+    def is_true(self):
+        return len(self.value) > 0
+
+    def copy(self):
+        copy = String(self.value)
+        copy.set_pos(self.pos_start, self.pos_end)
+        copy.set_context(self.context)
+        return copy
+
+    def __repr__(self):
+        if self.value == "":
+            return "''"
+        elif self.type == TT_STRING_S:
+            return f"'{self.value}'"
+        elif self.type == TT_STRING_D:
+            return f'"{self.value}"'
+
+
 class Function(Value):
     def __init__(self, name, body_node, arg_names):
         super().__init__()
@@ -1408,6 +1521,13 @@ class Interpreter:
     def visit_NumberNode(self, node, context):
         return RTresult().success(
             Number(node.tok.value)
+            .set_context(context)
+            .set_pos(node.pos_start, node.pos_end)
+        )
+
+    def visit_StringNode(self, node, context):
+        return RTresult().success(
+            String(node.tok.value, node.tok.type)
             .set_context(context)
             .set_pos(node.pos_start, node.pos_end)
         )
