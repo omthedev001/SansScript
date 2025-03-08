@@ -42,7 +42,7 @@ KEYWORDS = ['charaH','charah',
 DIGITS_S = '०१२३४५६७८९'
 DIGITS = '0123456789'
 LETTERS = string.ascii_letters
-LETTERS_DIGITS = LETTERS + DIGITS + ':'
+LETTERS_DIGITS = LETTERS + DIGITS 
 # Error
 class Error:
     def __init__(self,pos_start,pos_end,err_name,details):
@@ -176,7 +176,8 @@ class Lexer:
             elif self.current_char == '<':
                 tokens.append(self.make_less_than())
             elif self.current_char == ':':
-                tokens.append(self.make_identifier())
+                tokens.append(Token(TT_KEYWORD,':',pos_start=self.pos))
+                self.advance()
             elif self.current_char == '[':
                 tokens.append(Token(TT_LSQUARE,pos_start=self.pos))
                 self.advance()
@@ -340,11 +341,11 @@ class CallNode:
     def __init__(self,node_to_call,arg_nodes):
         self.node_to_call = node_to_call
         self.arg_nodes = arg_nodes
-        pos_start = self.node_to_call.pos_start
+        self.pos_start = self.node_to_call.pos_start
         if len(arg_nodes) > 0:
-            self.pos_start = self.arg_nodes[len(self.arg_nodes)-1].pos_end
+            self.pos_end = self.arg_nodes[len(self.arg_nodes)-1].pos_end
         else: 
-            self.pos_start = self.node_to_call.pos_end
+            self.pos_end = self.node_to_call.pos_end
 # Parse Result
 class ParseResult:
     def __init__(self):
@@ -440,7 +441,7 @@ class Parser:
     def for_expr(self):
         res = ParseResult()
 
-            
+        print("Calllled")   
         if not self.current_token.matches(TT_KEYWORD,'krrite') :
             print("CALLED")
             return res.failure(Expected_Char_Error(self.current_token.pos_start,self.current_token.pos_end,"apekchhit 'krrite'"))
@@ -500,16 +501,25 @@ class Parser:
         return res.success(WhileNode(condition,body))
     def func_def(self):
         res = ParseResult()
+        arg_name_tok = []
         if not self.current_token.matches(TT_KEYWORD,'niyoga'):
             return res.failure(Expected_Char_Error(self.current_token.pos_start,self.current_token.pos_end,"apekchhit 'niyoga'"))
+        print("Niyoga is correct")
+        print(self.current_token)
         res.register_advancement()
         self.advance()
         if self.current_token.type == TT_IDENTIFIER:
+            print("identifier correct")
+            print(self.current_token)
             var_name_tok = self.current_token
             res.register_advancement()
             self.advance()
+            print(self.current_token)
             if self.current_token.type != TT_LPAREN:
                 return res.failure(Expected_Char_Error(self.current_token.pos_start,self.current_token.pos_end,"apekchhit '('"))
+            print("lparen correct")
+            res.register_advancement()
+            self.advance()
         else:
             var_name_tok = None
             if self.current_token.type != TT_LPAREN:
@@ -518,13 +528,18 @@ class Parser:
             self.advance()
             arg_name_tok = []
         if self.current_token.type == TT_IDENTIFIER:
+            print(self.current_token)
+            print("second identifier correct")
             arg_name_tok.append(self.current_token)
+            print("problem occurs after appening current token")
             res.register_advancement()
             self.advance()
             while self.current_token.type == TT_COMMA:
+                print("comma")
                 res.register_advancement()
                 self.advance()
                 if self.current_token.type != TT_IDENTIFIER:
+                    print("variable identifier correct")
                     return res.failure(Expected_Char_Error(self.current_token.pos_start,self.current_token.pos_end,"apekchhit 'identifier'"))
                 arg_name_tok.append(self.current_token)
                 res.register_advancement()
@@ -532,7 +547,9 @@ class Parser:
             if self.current_token.type != TT_RPAREN:
                 return res.failure(Expected_Char_Error(self.current_token.pos_start,self.current_token.pos_end,"apekchhit ',' or ')'")) 
         else:
+            print("ERROR OCCURING HERE LEFTFUNC IS RETURNED EMPTY")
             return res.failure(Expected_Char_Error(self.current_token.pos_start,self.current_token.pos_end,"apekchhit 'identifier'"))
+        
         res.register_advancement()
         self.advance()  
         if not self.current_token.matches(TT_KEYWORD,':'):
@@ -602,10 +619,11 @@ class Parser:
             if_expr = res.register(self.if_expr())
             if res.error : return res
             return res.success(if_expr)
-        elif tok.matches(TT_KEYWORD,'kRRite') or tok.matches(TT_KEYWORD,'krrite'):
+        elif tok.matches(TT_KEYWORD, 'kRRite') or tok.matches(TT_KEYWORD, 'krrite'):
             print("match")
             for_expr = res.register(self.for_expr())
-            if res.error:return res
+            if res.error:
+                return res.failure(Invalid_Syntax_Error(self.current_token.pos_start, self.current_token.pos_end, "Invalid for-loop syntax"))
             return res.success(for_expr)
         elif tok.matches(TT_KEYWORD,'sopAnaH') or tok.matches(TT_KEYWORD,'sopanah'):
             while_expr = res.register(self.while_expr())
@@ -681,13 +699,18 @@ class Parser:
         if func_b == None:
             func_b = func_a
         left = res.register(func_a())
-        if res.error:return res
+        if left == None:
+            print("LNONE")
+        if res.error:
+            return res.failure(Invalid_Syntax_Error(self.current_token.pos_start, self.current_token.pos_end, "Invalid binary operation"))
         # self.advance()
         while self.current_token.type in ops or (self.current_token.type,self.current_token.value) in ops:
             op_tok = self.current_token
             res.register_advancement()
             self.advance()
             right = res.register(func_b())
+            if right == None:
+                print("RNONE")
             if res.error : return res 
             left = BinaryOpNode(left,op_tok,right)
         return res.success(left)
@@ -1058,6 +1081,7 @@ class Interpreter:
         return res.success(func_value)
     def visit_CallNode(self,node,context):
         res = RTresult()
+        print(node.arg_nodes)
         args = []
         value_to_call = res.register(self.visit(node.node_to_call,context))
         if res.error:
