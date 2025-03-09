@@ -1,5 +1,7 @@
 from strings_with_arrows import *
 import string
+import os
+import math
 from indic_transliteration import sanscript
 from indic_transliteration.sanscript import transliterate
 
@@ -236,10 +238,10 @@ class Lexer:
                 self.advance()
             elif self.current_char == "'":
                 tokens.append(self.make_string())
-                self.advance()
+
             elif self.current_char == '"':
                 tokens.append(self.make_string())
-                self.advance()
+
             else:
                 pos_start = self.pos.copy()
                 character = self.current_char
@@ -277,7 +279,7 @@ class Lexer:
                 self.advance()
                 escape_character = False
             self.advance()
-
+            print(self.current_char)
             return Token(TT_STRING_S, string_, pos_start, self.pos)
         elif str_type == '"':
             while self.current_char != None and (
@@ -456,7 +458,7 @@ class ForNode:
         self.end_value_node = end_value_node
         self.step_value_node = step_value_node
         self.body_node = body_node
-        self.pos_end = self.var_name_tok.pos_start
+        self.pos_start = self.var_name_tok.pos_start
         self.pos_end = self.body_node.pos_end
 
 
@@ -493,11 +495,13 @@ class CallNode:
         else:
             self.pos_end = self.node_to_call.pos_end
 
+
 class ListNode:
-    def __init__(self,element_nodes,pos_start,pos_end):
+    def __init__(self, element_nodes, pos_start, pos_end):
         self.element_nodes = element_nodes
         self.pos_start = pos_start
         self.pos_end = pos_end
+
 
 # Parse Result
 class ParseResult:
@@ -854,6 +858,7 @@ class Parser:
                 self.advance()
             else:
                 arg_nodes.append(res.register(self.expr()))
+                print("THIS WAS CALLED")
                 if res.error:
                     return res.failure(
                         Invalid_Syntax_Error(
@@ -869,6 +874,7 @@ class Parser:
                     arg_nodes.append(res.register(self.expr()))
                     if res.error:
                         return res
+                print("")
                 if self.current_token.type != TT_RPAREN:
                     return res.failure(
                         Expected_Char_Error(
@@ -881,13 +887,20 @@ class Parser:
                 self.advance()
             return res.success(CallNode(atom, arg_nodes))
         return res.success(atom)
+
     def list_expr(self):
         res = ParseResult()
         list_element_nodes = []
         pos_start = self.current_token.pos_start
 
         if self.current_token.type != TT_LSQUARE:
-            return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,"अपेक्षितं '[' | apekchhit '['"))
+            return res.failure(
+                Invalid_Syntax_Error(
+                    self.current_token.pos_start,
+                    self.current_token.pos_end,
+                    "अपेक्षितं '[' | apekchhit '['",
+                )
+            )
         res.register_advancement()
         self.advance()
         if self.current_token.type == TT_RSQUARE:
@@ -919,7 +932,10 @@ class Parser:
                 )
             res.register_advancement()
             self.advance()
-        return res.success(ListNode(list_element_nodes,pos_start,self.current_token.pos_end.copy()))
+        return res.success(
+            ListNode(list_element_nodes, pos_start, self.current_token.pos_end.copy())
+        )
+
     def atom(self):
         res = ParseResult()
         tok = self.current_token
@@ -981,7 +997,7 @@ class Parser:
             if res.error:
                 return res
             return res.success(func_expr)
-        elif tok.type  == TT_LSQUARE:
+        elif tok.type == TT_LSQUARE:
             list_expr = res.register(self.list_expr())
             if res.error:
                 return res
@@ -1221,41 +1237,50 @@ class Value:
                 self.pos_start, self.pos_end, "अवैध क्रिया | avaidh kriya", self.context
             )
 
+
 class List(Value):
-    def __init__(self,elements):
+    def __init__(self, elements):
         super().__init__()
         self.elements = elements
+
     def added_to(self, other):
         newlist = self.copy()
         newlist.elements.append(other)
-        return newlist,None
+        return newlist, None
+
     def subtracted_from(self, other):
-        if isinstance(other,Number):
+        if isinstance(other, Number):
             print(other.value)
             newlist = self.copy()
             try:
                 newlist.elements.pop(other.value)
-                return newlist,None
+                return newlist, None
             except:
-                return None,RTError(other.pos_start,other.pos_end,"अवैध स्थानम् | avaidh sthanam",self.context)
+                return None, RTError(
+                    other.pos_start,
+                    other.pos_end,
+                    "अवैध स्थानम् | avaidh sthanam",
+                    self.context,
+                )
         else:
-            return None,Value.illegal_operation(self,other)
+            return None, Value.illegal_operation(self, other)
+
     def multiplied_by(self, other):
-        if isinstance(other,Number):
+        if isinstance(other, Number):
             newlist = self.copy()
             newlist.elements * other.value
-            return newlist,None
-        elif isinstance(other,List):
+            return newlist, None
+        elif isinstance(other, List):
             list_1 = self.copy()
             list_2 = other.copy()
             length_1 = len(list_1.elements)
             length_2 = len(list_2.elements)
             newlist = []
-            max_len = max(length_1,length_2)
+            max_len = max(length_1, length_2)
             if length_1 != length_2:
-                
-                list_1.elements += [Number(0)] * (max_len-length_1)
-                list_2.elements += [Number(0)] * (max_len-length_2)
+
+                list_1.elements += [Number(0)] * (max_len - length_1)
+                list_2.elements += [Number(0)] * (max_len - length_2)
                 for i in range(max_len):
                     elem1 = list_1.elements[i]
                     elem2 = list_2.elements[i]
@@ -1263,24 +1288,33 @@ class List(Value):
                     if error:
                         return None, error
                     newlist.append(product)
-            return List(newlist),None
+            return List(newlist), None
         else:
-            return None,Value.illegal_operation(self,other)
+            return None, Value.illegal_operation(self, other)
+
     def divided_by(self, other):
-        if isinstance(other,Number):
+        if isinstance(other, Number):
             try:
-                return self.elements[other.value],None
+                return self.elements[other.value], None
             except:
-                return None,RTError(other.pos_start,other.pos_end,"अवैध स्थानम् | avaidh sthanam",self.context)
+                return None, RTError(
+                    other.pos_start,
+                    other.pos_end,
+                    "अवैध स्थानम् | avaidh sthanam",
+                    self.context,
+                )
         else:
-            return None,Value.illegal_operation(self,other)
+            return None, Value.illegal_operation(self, other)
+
     def copy(self):
-        copy = List(self.elements[:])
-        copy.set_pos(self.pos_start,self.pos_end)
+        copy = List(self.elements)
+        copy.set_pos(self.pos_start, self.pos_end)
         copy.set_context(self.context)
         return copy
+
     def __repr__(self):
         return f"[{', '.join([str(x) for x in self.elements])}]"
+
 
 class Number(Value):
     def __init__(self, value):
@@ -1406,6 +1440,12 @@ class Number(Value):
         return str(self.value)
 
 
+Number.null = Number(0)
+Number.false = Number(0)
+Number.true = Number(1)
+Number.math_pi = Number(math.pi)
+
+
 class String(Value):
     def __init__(self, value, type):
         super().__init__()
@@ -1436,7 +1476,7 @@ class String(Value):
         return len(self.value) > 0
 
     def copy(self):
-        copy = String(self.value)
+        copy = String(self.value, TT_STRING_D)
         copy.set_pos(self.pos_start, self.pos_end)
         copy.set_context(self.context)
         return copy
@@ -1450,42 +1490,67 @@ class String(Value):
             return f'"{self.value}"'
 
 
-class Function(Value):
-    def __init__(self, name, body_node, arg_names):
+class BaseFunction(Value):
+    def __init__(self, name):
         super().__init__()
         self.name = name or "<अज्ञातम्>"
-        self.body_node = body_node
+
+    def generate_new_context(self):
+        new_context = Context(self.name, self.context, self.pos_start)
+        new_context.symbol_table = SymbolTable(new_context.parent.symbol_table)
+        return new_context
+
+    def check_args(self, arg_names, args):
+        res = RTresult()
+        if len(args) > len(arg_names):
+            return res.failure(
+                RTError(
+                    self.pos_start,
+                    self.pos_end,
+                    f"{len(args) - len(arg_names)} अधिक प्राप्ताः | {len(args) - len(arg_names)} adhik praptaah",
+                    self.context,
+                )
+            )
+        if len(args) < len(arg_names):
+            return res.failure(
+                RTError(
+                    self.pos_start,
+                    self.pos_end,
+                    f"{len(arg_names) - len(args)} अभावाः | {len(arg_names) - len(args)} abhavah",
+                    self.context,
+                )
+            )
+        return res.success(None)
+
+    def populate_args(self, arg_names, args, exec_ctx):
+        for i in range(len(args)):
+            arg_name = arg_names[i]
+            arg_value = args[i]
+            arg_value.set_context(exec_ctx)
+            exec_ctx.symbol_table.set(arg_name, arg_value)
+
+    def check_and_populate_args(self, arg_names, args, exec_ctx):
+        res = RTresult()
+        res.register(self.check_args(arg_names, args))
+        if res.error:
+            return res
+        self.populate_args(arg_names, args, exec_ctx)
+        return res.success(None)
+
+
+class Function(BaseFunction):
+    def __init__(self, name, body_node, arg_names):
+        super().__init__(name)
         self.arg_names = arg_names
 
     def execute(self, args):
         res = RTresult()
         interpreter = Interpreter()
-        new_context = Context(self.name, self.context, self.pos_start)
-        new_context.symbol_table = SymbolTable(new_context.parent.symbol_table)
-        if len(args) > len(self.arg_names):
-            return res.failure(
-                RTError(
-                    self.pos_start,
-                    self.pos_end,
-                    f"{len(args) - len(self.arg_names)} अधिक प्राप्ताः | {len(args) - len(self.arg_names)} adhik praptaah",
-                    self.context,
-                )
-            )
-        elif len(args) < len(self.arg_names):
-            return res.failure(
-                RTError(
-                    self.pos_start,
-                    self.pos_end,
-                    f"{len(self.arg_names) - len(args)} अभावाः | {len(self.arg_names) - len(args)} abhavah",
-                    self.context,
-                )
-            )
-        for i in range(len(args)):
-            arg_name = self.arg_names[i]
-            arg_value = args[i]
-            arg_value.set_context(new_context)
-            new_context.symbol_table.set(arg_name, arg_value)
-        value = res.register(interpreter.visit(self.body_node, new_context))
+        exec_ctx = self.generate_new_context()
+        res.register(self.check_and_populate_args(self.arg_names, args, exec_ctx))
+        if res.error:
+            return res
+        value = res.register(interpreter.visit(self.body_node, exec_ctx))
         if res.error:
             return res
         return res.success(value)
@@ -1498,6 +1563,178 @@ class Function(Value):
 
     def __repr__(self):
         return f"<function {self.name}>"
+
+
+class BuiltinFunction(BaseFunction):
+    def __init__(self, name):
+        super().__init__(name)
+
+    def execute(self, args):
+        res = RTresult()
+        exec_ctx = self.generate_new_context()
+        method_name = f"execute_{self.name}"
+        method = getattr(self, method_name, self.no_visit_method)
+        res.register(self.check_and_populate_args(method.arg_names, args, exec_ctx))
+        if res.error:
+            return res
+
+        return_value = res.register(method(exec_ctx))
+        if res.error:
+            return res
+        return res.success(return_value)
+
+    def no_visit_method(self, args, exec_ctx):
+        raise Exception(f"No execute_{self.name} method defined")
+
+    def copy(self):
+        copy = BuiltinFunction(self.name)
+        copy.set_context(self.context)
+        copy.set_pos(self.pos_start, self.pos_end)
+        return copy
+
+    def __repr__(self):
+        return f"<built-in function {self.name}>"
+
+    def execute_print(self, exec_ctx):
+        print(str(exec_ctx.symbol_table.get("value").value))
+        return RTresult().success(Number.null)
+
+    execute_print.arg_names = ["value"]
+
+    def execute_print_rt(self, args, exec_ctx):
+        return RTresult().success(String(str(exec_ctx.symbol_table.get("value").value)))
+
+    execute_print_rt.arg_names = ["value"]
+
+    def execute_input(self, exec_ctx):
+        text = input()
+        return RTresult().success(String(text, TT_STRING_D))
+
+    execute_input.arg_names = []
+
+    def execute_input_int(self, exec_ctx):
+        text = input()
+        while True:
+            try:
+                number = int(text)
+                break
+            except ValueError:
+                return RTresult().failure(
+                    RTError(
+                        self.pos_start,
+                        self.pos_end,
+                        "अवैध अंकः | avaidh ankah",
+                        self.context,
+                    )
+                )
+        return RTresult().success(Number(number))
+
+    execute_input_int.arg_names = []
+
+    def execute_clear(self, exec_ctx):
+        os.system("cls" if os.name == "nt" else "clear")
+        return RTresult().success(Number.null)
+
+    execute_clear.arg_names = []
+
+    def execute_is_number(self, exec_ctx):
+        is_number = isinstance(exec_ctx.symbol_table.get("value"), Number)
+        return RTresult().success(Number(int(is_number)))
+
+    execute_is_number.arg_names = ["value"]
+
+    def execute_is_string(self, exec_ctx):
+        is_string = isinstance(exec_ctx.symbol_table.get("value"), String)
+        return RTresult().success(Number(int(is_string)))
+
+    execute_is_string.arg_names = ["value"]
+
+    def execute_is_list(self, exec_ctx):
+        is_list = isinstance(exec_ctx.symbol_table.get("value"), List)
+        return RTresult().success(Number(int(is_list)))
+
+    execute_is_list.arg_names = ["value"]
+
+    def execute_is_function(self, exec_ctx):
+        is_function = isinstance(exec_ctx.symbol_table.get("value"), BaseFunction)
+        return RTresult().success(Number(int(is_function)))
+
+    execute_is_function.arg_names = ["value"]
+
+    def execute_append(self, exec_ctx):
+        list_ = exec_ctx.symbol_table.get("list")
+        value = exec_ctx.symbol_table.get("value")
+        if not isinstance(list_, List):
+            return RTresult().failure(
+                RTError(
+                    self.pos_start, self.pos_end, "अवैध सूची | avaidh suchi", self.context
+                )
+            )
+        list_.elements.append(value)
+        return RTresult().success(Number.null)
+
+    execute_append.arg_names = ["list", "value"]
+
+    def execute_pop(self, exec_ctx):
+        list_ = exec_ctx.symbol_table.get("list")
+        index = exec_ctx.symbol_table.get("index")
+        if not isinstance(list_, List):
+            return RTresult().failure(
+                RTError(
+                    self.pos_start, self.pos_end, "अवैध सूची | avaidh suchi", self.context
+                )
+            )
+        if not isinstance(index, Number):
+            return RTresult().failure(
+                RTError(
+                    self.pos_start,
+                    self.pos_end,
+                    "अवैध स्थानम् | avaidh sthanam",
+                    self.context,
+                )
+            )
+        try:
+            element = list_.elements.pop(index.value)
+        except:
+            return RTresult().failure(
+                RTError(
+                    self.pos_start,
+                    self.pos_end,
+                    "अवैध स्थानम् | avaidh sthanam",
+                    self.context,
+                )
+            )
+        return RTresult().success(element)
+
+    execute_pop.arg_names = ["list", "index"]
+
+    def execute_extend(self, exec_ctx):
+        list1 = exec_ctx.symbol_table.get("list1")
+        list2 = exec_ctx.symbol_table.get("list2")
+        if not isinstance(list1, List) or not isinstance(list2, List):
+            return RTresult().failure(
+                RTError(
+                    self.pos_start, self.pos_end, "अवैध सूची | avaidh suchi", self.context
+                )
+            )
+        list1.elements.extend(list2.elements)
+        return RTresult().success(Number.null)
+
+    execute_extend.arg_names = ["list1", "list2"]
+
+
+BuiltinFunction.print = BuiltinFunction("print")
+BuiltinFunction.print_rt = BuiltinFunction("print_rt")
+BuiltinFunction.input = BuiltinFunction("input")
+BuiltinFunction.input_int = BuiltinFunction("input_int")
+BuiltinFunction.clear = BuiltinFunction("clear")
+BuiltinFunction.is_number = BuiltinFunction("is_number")
+BuiltinFunction.is_string = BuiltinFunction("is_string")
+BuiltinFunction.is_list = BuiltinFunction("is_list")
+BuiltinFunction.is_function = BuiltinFunction("is_function")
+BuiltinFunction.append = BuiltinFunction("append")
+BuiltinFunction.pop = BuiltinFunction("pop")
+BuiltinFunction.extend = BuiltinFunction("extend")
 
 
 # Context
@@ -1586,7 +1823,9 @@ class Interpreter:
             elements.append(res.register(self.visit(node.body_node, context)))
             if res.error:
                 return res
-        return res.success(List(elements).set_context(context).set_pos(node.pos_start,node.pos_end))
+        return res.success(
+            List(elements).set_context(context).set_pos(node.pos_start, node.pos_end)
+        )
 
     def visit_WhileNode(self, node, context):
         res = RTresult()
@@ -1600,15 +1839,21 @@ class Interpreter:
             elements.append(res.register(self.visit(node.body_node, context)))
             if res.error:
                 return res
-        return res.success(List(elements).set_context(context).set_pos(node.pos_start,node.pos_end))
-    def visit_ListNode(self,node,context):
+        return res.success(
+            List(elements).set_context(context).set_pos(node.pos_start, node.pos_end)
+        )
+
+    def visit_ListNode(self, node, context):
         res = RTresult()
         elements = []
         for element_node in node.element_nodes:
-            elements.append(res.register(self.visit(element_node,context)))
+            elements.append(res.register(self.visit(element_node, context)))
             if res.error:
                 return res
-        return res.success(List(elements).set_context(context).set_pos(node.pos_start,node.pos_end))
+        return res.success(
+            List(elements).set_context(context).set_pos(node.pos_start, node.pos_end)
+        )
+
     def visit_VarAccessNode(self, node, context):
         res = RTresult()
         var_name = node.var_name_tok.value
@@ -1623,7 +1868,7 @@ class Interpreter:
                     context,
                 )
             )
-        value = value.copy().set_pos(node.pos_start, node.pos_end)
+        value = value.copy().set_pos(node.pos_start, node.pos_end).set_context(context)
         return res.success(value)
 
     def visit_VarAssignNode(self, node, context):
@@ -1734,13 +1979,32 @@ class Interpreter:
         return_value = res.register(value_to_call.execute(args))
         if res.error:
             return res
+        return_value = (
+            return_value.copy()
+            .set_pos(node.pos_start, node.pos_end)
+            .set_context(context)
+        )
         return res.success(return_value)
 
 
 global_symbol_table = SymbolTable()
-global_symbol_table.set("null", Number(0))
-global_symbol_table.set("true", Number(1))
-global_symbol_table.set("false", Number(0))
+global_symbol_table.set("null", Number.null)
+global_symbol_table.set("true", Number.true)
+global_symbol_table.set("false", Number.false)
+global_symbol_table.set("pi", Number.math_pi)
+global_symbol_table.set("print", BuiltinFunction.print)
+global_symbol_table.set("print_rt", BuiltinFunction.print_rt)
+global_symbol_table.set("input", BuiltinFunction.input)
+global_symbol_table.set("input_int", BuiltinFunction.input_int)
+global_symbol_table.set("clear", BuiltinFunction.clear)
+global_symbol_table.set("cls", BuiltinFunction.clear)
+global_symbol_table.set("is_number", BuiltinFunction.is_number)
+global_symbol_table.set("is_string", BuiltinFunction.is_string)
+global_symbol_table.set("is_list", BuiltinFunction.is_list)
+global_symbol_table.set("is_function", BuiltinFunction.is_function)
+global_symbol_table.set("append", BuiltinFunction.append)
+global_symbol_table.set("pop", BuiltinFunction.pop)
+global_symbol_table.set("extend", BuiltinFunction.extend)
 
 
 # Run
