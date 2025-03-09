@@ -493,6 +493,11 @@ class CallNode:
         else:
             self.pos_end = self.node_to_call.pos_end
 
+class ListNode:
+    def __init__(self,element_nodes,pos_start,pos_end):
+        self.element_nodes = element_nodes
+        self.pos_start = pos_start
+        self.pos_end = pos_end
 
 # Parse Result
 class ParseResult:
@@ -876,7 +881,45 @@ class Parser:
                 self.advance()
             return res.success(CallNode(atom, arg_nodes))
         return res.success(atom)
+    def list_expr(self):
+        res = ParseResult()
+        list_element_nodes = []
+        pos_start = self.current_token.pos_start
 
+        if self.current_token.type != TT_LSQUARE:
+            return res.failure(Invalid_Syntax_Error(self.current_token.pos_start,self.current_token.pos_end,"अपेक्षितं '[' | apekchhit '['"))
+        res.register_advancement()
+        self.advance()
+        if self.current_token.type == TT_RSQUARE:
+            res.register_advancement()
+            self.advance()
+        else:
+            list_element_nodes.append(res.register(self.expr()))
+            if res.error:
+                return res.failure(
+                    Invalid_Syntax_Error(
+                        self.current_token.pos_start,
+                        self.current_token.pos_end,
+                        "अपेक्षितं INT,FLOAT,+,-,परिचयकः अथवा ] | apekchhit INT,FLOAT,+,-,parichayakah athva (",
+                    )
+                )
+            while self.current_token.type == TT_COMMA:
+                res.register_advancement()
+                self.advance()
+                list_element_nodes.append(res.register(self.expr()))
+                if res.error:
+                    return res
+            if self.current_token.type != TT_RSQUARE:
+                return res.failure(
+                    Expected_Char_Error(
+                        self.current_token.pos_start,
+                        self.current_token.pos_end,
+                        "apekchhit ',' or ')'",
+                    )
+                )
+            res.register_advancement()
+            self.advance()
+        return res.success(ListNode(list_element_nodes,pos_start,self.current_token.pos_end.copy()))
     def atom(self):
         res = ParseResult()
         tok = self.current_token
@@ -938,6 +981,11 @@ class Parser:
             if res.error:
                 return res
             return res.success(func_expr)
+        elif tok.type  == TT_LSQUARE:
+            list_expr = res.register(self.list_expr())
+            if res.error:
+                return res
+            return res.success(list_expr)
 
         return res.failure(
             Invalid_Syntax_Error(
@@ -1173,6 +1221,66 @@ class Value:
                 self.pos_start, self.pos_end, "अवैध क्रिया | avaidh kriya", self.context
             )
 
+class List(Value):
+    def __init__(self,elements):
+        super().__init__()
+        self.elements = elements
+    def added_to(self, other):
+        newlist = self.copy()
+        newlist.elements.append(other)
+        return newlist,None
+    def subtracted_from(self, other):
+        if isinstance(other,Number):
+            print(other.value)
+            newlist = self.copy()
+            try:
+                newlist.elements.pop(other.value)
+                return newlist,None
+            except:
+                return None,RTError(other.pos_start,other.pos_end,"अवैध स्थानम् | avaidh sthanam",self.context)
+        else:
+            return None,Value.illegal_operation(self,other)
+    def multiplied_by(self, other):
+        if isinstance(other,Number):
+            newlist = self.copy()
+            newlist.elements * other.value
+            return newlist,None
+        elif isinstance(other,List):
+            list_1 = self.copy()
+            list_2 = other.copy()
+            length_1 = len(list_1.elements)
+            length_2 = len(list_2.elements)
+            newlist = []
+            max_len = max(length_1,length_2)
+            if length_1 != length_2:
+                
+                list_1.elements += [Number(0)] * (max_len-length_1)
+                list_2.elements += [Number(0)] * (max_len-length_2)
+                for i in range(max_len):
+                    elem1 = list_1.elements[i]
+                    elem2 = list_2.elements[i]
+                    product, error = elem1.multiplied_by(elem2)
+                    if error:
+                        return None, error
+                    newlist.append(product)
+            return List(newlist),None
+        else:
+            return None,Value.illegal_operation(self,other)
+    def divided_by(self, other):
+        if isinstance(other,Number):
+            try:
+                return self.elements[other.value],None
+            except:
+                return None,RTError(other.pos_start,other.pos_end,"अवैध स्थानम् | avaidh sthanam",self.context)
+        else:
+            return None,Value.illegal_operation(self,other)
+    def copy(self):
+        copy = List(self.elements[:])
+        copy.set_pos(self.pos_start,self.pos_end)
+        copy.set_context(self.context)
+        return copy
+    def __repr__(self):
+        return f"[{', '.join([str(x) for x in self.elements])}]"
 
 class Number(Value):
     def __init__(self, value):
@@ -1455,6 +1563,7 @@ class Interpreter:
 
     def visit_ForNode(self, node, context):
         res = RTresult()
+        elements = []
         start_value = res.register(self.visit(node.start_value_node, context))
         if res.error:
             return res
@@ -1474,24 +1583,32 @@ class Interpreter:
             print("R")
             context.symbol_table.set(node.var_name_tok.value, Number(i))
             i += step_value.value
-            res.register(self.visit(node.body_node, context))
+            elements.append(res.register(self.visit(node.body_node, context)))
             if res.error:
                 return res
-        return res.success(None)
+        return res.success(List(elements).set_context(context).set_pos(node.pos_start,node.pos_end))
 
     def visit_WhileNode(self, node, context):
         res = RTresult()
+        elements = []
         while True:
             condition = res.register(self.visit(node.condition_node, context))
             if res.error:
                 return res
             if not condition.is_true():
                 break
-            res.register(self.visit(node.body_node, context))
+            elements.append(res.register(self.visit(node.body_node, context)))
             if res.error:
                 return res
-        return res.success(None)
-
+        return res.success(List(elements).set_context(context).set_pos(node.pos_start,node.pos_end))
+    def visit_ListNode(self,node,context):
+        res = RTresult()
+        elements = []
+        for element_node in node.element_nodes:
+            elements.append(res.register(self.visit(element_node,context)))
+            if res.error:
+                return res
+        return res.success(List(elements).set_context(context).set_pos(node.pos_start,node.pos_end))
     def visit_VarAccessNode(self, node, context):
         res = RTresult()
         var_name = node.var_name_tok.value
