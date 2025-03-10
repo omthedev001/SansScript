@@ -49,6 +49,7 @@ KEYWORDS = [
     "yAvad",
     "yavad",
     "niyoga",
+    "sopanah","sopAnaH"
 ]
 
 DIGITS_S = "०१२३४५६७८९"
@@ -710,9 +711,10 @@ class Parser:
 
     def while_expr(self):
         res = ParseResult()
-        if not self.current_token.matches(
-            TT_KEYWORD, "sopAnaH"
-        ) or not self.current_token.matches(TT_KEYWORD, "sopanah"):
+        print("starting while expr")
+        print(self.current_token)
+        if not self.current_token.matches(TT_KEYWORD, "sopanah"):
+            
             return res.failure(
                 Expected_Char_Error(
                     self.current_token.pos_start,
@@ -722,6 +724,7 @@ class Parser:
             )
         res.register_advancement()
         self.advance()
+        print("passed 1st barrier")
         condition = res.register(self.expr())
         if res.error:
             return res
@@ -988,6 +991,7 @@ class Parser:
                 )
             return res.success(for_expr)
         elif tok.matches(TT_KEYWORD, "sopAnaH") or tok.matches(TT_KEYWORD, "sopanah"):
+            print("MATCH")
             while_expr = res.register(self.while_expr())
             if res.error:
                 return res
