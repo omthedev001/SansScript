@@ -433,10 +433,10 @@ class VarAccessNode:
 
 
 class VarAssignNode:
-    def __init__(self, var_name_tok, value_node,is_declaration = False):
+    def __init__(self, var_name_tok, value_node):
         self.var_name_tok = var_name_tok
         self.value_node = value_node
-        self.is_declaration = is_declaration
+
         self.pos_start = self.var_name_tok.pos_start
         self.pos_end = self.value_node.pos_end
 
@@ -1094,7 +1094,7 @@ class Parser:
             expr = res.register(self.expr())
             if res.error:
                 return res
-            return res.success(VarAssignNode(var_name, expr, True))
+            return res.success(VarAssignNode(var_name, expr))
         node = res.register(
             self.bin_op(
                 self.comp_expr,
@@ -1114,14 +1114,6 @@ class Parser:
                     "अपेक्षितं INT,FLOAT,+,-,परिचयकः अथवा ( | apekchhit charah ,INT,FLOAT,+,-,nahi,parichayakah athva (",
                 )
             )
-        if self.current_token.type == TT_EQ:
-            if not isinstance(node, VarAccessNode):
-                return res.failure(Invalid_Syntax_Error(...))
-            var_name_tok = node.var_name_tok
-            res.register_advancement()
-            self.advance()
-            expr_node = res.register(self.expr())
-            return res.success(VarAssignNode(var_name_tok, expr_node, is_declaration=False))
         return res.success(node)
 
     def bin_op(self, func_a, ops, func_b=None):
@@ -1762,7 +1754,6 @@ class Context:
 class SymbolTable:
     def __init__(self, parent=None):
         self.symbols = {}
-        self.declared = set()
         self.parent = parent
 
     def get(self, name):
@@ -1776,14 +1767,6 @@ class SymbolTable:
 
     def remove(self, name):
         del self.symbols[name]
-    def declare(self, name):
-        self.declared.add(name)
-    def is_declared(self, name):
-        if name in self.declared:
-            return True
-        if self.parent:
-            return self.parent.is_declared(name)
-        return False
 
 
 # Interpreter
@@ -1878,15 +1861,6 @@ class Interpreter:
     def visit_VarAccessNode(self, node, context):
         res = RTresult()
         var_name = node.var_name_tok.value
-        if not context.symbol_table.is_declared(var_name):
-            return res.failure(
-                RTError(
-                    node.pos_start,
-                    node.pos_end,
-                    f"'{var_name}' न विवक्षितम् | {var_name} na vivakshitam",
-                    context,
-                )
-            )
         value = context.symbol_table.get(var_name)
 
         if not value:
@@ -1907,29 +1881,6 @@ class Interpreter:
         value = res.register(self.visit(node.value_node, context))
         if res.error:
             return res
-        if node.is_declaration:
-            if context.symbol_table.is_declared(var_name):
-                return res.failure(
-                    RTError(
-                        node.pos_start,
-                        node.pos_end,
-                        f"'{var_name}' पुनः घोषितम् | {var_name} punah ghoshitam",
-                        context,
-                    )
-                )
-            context.symbol_table.declare(var_name)
-        else:
-            if not context.symbol_table.is_declared(var_name):
-                return res.failure(
-                    RTError(
-                        node.pos_start,
-                        node.pos_end,
-                        f"'{var_name}' अप्रघोषितम् | {var_name} apraghoshitam",
-                        context,
-                    )
-                )
-            
-            
         context.symbol_table.set(var_name, value)
         return res.success(value)
 
@@ -2041,7 +1992,6 @@ class Interpreter:
 
 
 global_symbol_table = SymbolTable()
-global_symbol_table.declare("true")
 global_symbol_table.set("null", Number.null)
 global_symbol_table.set("true", Number.true)
 global_symbol_table.set("false", Number.false)
