@@ -2,11 +2,15 @@ import SansScript
 
 while True:
     text = str(input("SansScript>> "))
+    if text.strip() == "" : continue
     result, error = SansScript.Run(text, "test.sans")
     
     if error:
         print(error.as_string())
     elif result:
-        print(f'SANSCRIPT RESULT >> {result} <<')
+        if len(result.elements) == 1:
+            print(f'SANSCRIPT RESULT >> {result.elements[0]} <<')
+        else:
+            print(f'SANSCRIPT RESULT >> {result} <<')
 
     # main()
