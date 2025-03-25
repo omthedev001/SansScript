@@ -2,7 +2,7 @@ from indic_transliteration import sanscript
 from indic_transliteration.sanscript import transliterate
 
 # Devanagari text
-devnagari_text = "अंत"
+devnagari_text = "विरामः"
 
 # Transliterate Devanagari to English (IAST format)
 english_text = str(

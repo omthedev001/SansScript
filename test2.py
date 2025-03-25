@@ -3,7 +3,7 @@ import test as SansScript
 while True:
     text = str(input("SansScript>> "))
     if text.strip() == "" : continue
-    result, error = SansScript.run(text, "test.sans")
+    result, error = SansScript.run("test.sans",text)
     
     if error:
         print(error.as_string())
