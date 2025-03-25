@@ -59,7 +59,7 @@ KEYWORDS = [
     "pratyAvartanam",
     "pratyavartanam",
     "virAmaH",
-    "viramah",
+    "viramah"
 ]
 
 DIGITS_S = "०१२३४५६७८९"

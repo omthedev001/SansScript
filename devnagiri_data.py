@@ -23,7 +23,37 @@ sanskrit_words = [
     "परिमाणम्",   # len  
     "धावयति"     # run  
 ]
-
+KEYWORDS = [
+    "charaH",
+    "charah",
+    "tathA",
+    "tatha",
+    "vA",
+    "va",
+    "nahi",
+    "yadi",
+    ":",
+    "anyadi",
+    "uta",
+    "kRRite",
+    "krrite",
+    "ityasmai",
+    "charaNa",
+    "charana",
+    "yAvad",
+    "yavad",
+    "niyoga",
+    "sopanah",
+    "sopAnaH",
+    "aMta",
+    "anta",
+    "amta",
+    "anuvartanam",
+    "pratyAvartanam",
+    "pratyavartanam",
+    "virAmaH",
+    "viramah"
+]
 print(sanskrit_words)
 
 for i in sanskrit_words:

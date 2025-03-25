@@ -1,1 +1,16 @@
-मुद्रयति("नरकं हाँ")
+#Age Verification Program
+charah umar = अंक_प्रवेशः()
+#mudrayati(umar)
+
+niyoga say_hello(name):
+    charah naam = "Namaste " + name
+    krrite i = 0 ityasmai 10:
+        mudrayati(naam)
+    aMta
+aMta
+yadi umar < 18:
+    mudrayati("Not Allowed To Vote")
+    मुद्रयति("Must be 18 or older")
+uta: mudrayati("yes you can Vote")
+
+say_hello("Om")
