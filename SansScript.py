@@ -199,6 +199,8 @@ class Lexer:
         while self.current_char is not None:
             if self.current_char in " \t":
                 self.advance()  # Skip whitespace
+            elif self.current_char in "#":
+                self.skip_comment()
             elif self.current_char in ";\n":
                 tokens.append(Token(TT_NEWLINE, pos_start=self.pos))
                 self.advance()
@@ -265,7 +267,11 @@ class Lexer:
                 )  # Handle invalid characters
         tokens.append(Token(TT_EOF, pos_start=self.pos))
         return tokens, None  # Return tokens and no error
-
+    def skip_comment(self):
+        self.advance()
+        while self.current_char != "\n":
+            self.advance()
+        self.advance()
     def make_string(self):
         string_ = ""
         pos_start = self.pos.copy()
@@ -741,7 +747,7 @@ class Parser:
                 return res
             cases.append((condition, statements, True))
 
-            if self.current_token.matches(TT_KEYWORD, "anta"):
+            if self.current_token.matches(TT_KEYWORD, "aMta"):
                 res.register_advancement()
                 self.advance()
             else:
@@ -1551,7 +1557,7 @@ class List(Value):
     def multiplied_by(self, other):
         if isinstance(other, Number):
             newlist = self.copy()
-            newlist.elements * other.value
+            newlist.elements.append(other)
             return newlist, None
         elif isinstance(other, List):
             list_1 = self.copy()
@@ -1560,18 +1566,20 @@ class List(Value):
             length_2 = len(list_2.elements)
             newlist = []
             max_len = max(length_1, length_2)
-            if length_1 != length_2:
+            print(max_len)
 
-                list_1.elements += [Number(0)] * (max_len - length_1)
-                list_2.elements += [Number(0)] * (max_len - length_2)
-                for i in range(max_len):
-                    elem1 = list_1.elements[i]
-                    elem2 = list_2.elements[i]
-                    product, error = elem1.multiplied_by(elem2)
-                    if error:
-                        return None, error
-                    newlist.append(product)
+
+            list_1.elements += [Number(0)] * (max_len - length_1)
+            list_2.elements += [Number(0)] * (max_len - length_2)
+            for i in range(max_len):
+                elem1 = list_1.elements[i]
+                elem2 = list_2.elements[i]
+                product, error = elem1.multiplied_by(elem2)
+                if error:
+                    return None, error
+                newlist.append(product)
             return List(newlist), None
+                
         else:
             return None, Value.illegal_operation(self, other)
 
@@ -1596,7 +1604,7 @@ class List(Value):
         return copy
 
     def __repr__(self):
-        return f"[{', '.join([str(x) for x in self.elements])}]"
+        return f'[{", ".join([repr(x) for x in self.elements])}]'
 
 
 class Number(Value):
@@ -1889,7 +1897,7 @@ class BuiltinFunction(BaseFunction):
         return f"<built-in function {self.name}>"
 
     def execute_print(self, exec_ctx):
-        print(str(exec_ctx.symbol_table.get("value").value))
+        print(str(exec_ctx.symbol_table.get("value")))
         return RTresult().success(Number.null)
 
     execute_print.arg_names = ["value"]
@@ -2016,6 +2024,35 @@ class BuiltinFunction(BaseFunction):
         return RTresult().success(Number.null)
 
     execute_extend.arg_names = ["list1", "list2"]
+    def execute_run(self,exec_ctx):
+        list_ = exec_ctx.symbol_table.get("list")
+        if not isinstance(list_, List):
+            return RTresult().failure(
+                RTError(self.pos_start, self.pos_end, "अवैध सूची | avaidh suchi", self.context)
+            )
+        return RTresult().success(Number(len(list_.elements)))
+    execute_run.arg_names = ["list"]
+    def execute_run(self,exec_ctx):
+        fn = exec_ctx.symbol_table.get("fn")
+        if not isinstance(fn, String):
+            return RTresult().failure(
+                RTError(self.pos_start, self.pos_end, "अवैध स्थानम् | avaidh sthanam", self.context)
+            )
+        fn = fn.value
+        try:
+            with open(fn, "r",encoding= 'utf8') as f:
+                script = f.read()
+        except Exception as e:
+            return RTresult().failure(
+                RTError(self.pos_start, self.pos_end, f"अवैध फ़ाइलः {e}", self.context)
+            )
+        _ , error = Run(script,fn)
+        if error:
+            return RTresult().failure(
+                RTError(self.pos_start, self.pos_end, f"अवैध फ़ाइलः {error}", self.context)
+            )
+        return RTresult().success(Number.null)
+    execute_run.arg_names = ["fn"]
 
 
 BuiltinFunction.print = BuiltinFunction("print")
@@ -2030,7 +2067,8 @@ BuiltinFunction.is_function = BuiltinFunction("is_function")
 BuiltinFunction.append = BuiltinFunction("append")
 BuiltinFunction.pop = BuiltinFunction("pop")
 BuiltinFunction.extend = BuiltinFunction("extend")
-
+BuiltinFunction.len = BuiltinFunction("len")
+BuiltinFunction.run = BuiltinFunction("run")
 
 # Context
 class Context:
@@ -2324,23 +2362,44 @@ class Interpreter:
 
 
 global_symbol_table = SymbolTable()
-global_symbol_table.set("null", Number.null)
-global_symbol_table.set("true", Number.true)
-global_symbol_table.set("false", Number.false)
+global_symbol_table.set("shUnya", Number.null)
+global_symbol_table.set("satya", Number.true)
+global_symbol_table.set("asatya", Number.false)
 global_symbol_table.set("pi", Number.math_pi)
-global_symbol_table.set("print", BuiltinFunction.print)
-global_symbol_table.set("print_rt", BuiltinFunction.print_rt)
-global_symbol_table.set("input", BuiltinFunction.input)
-global_symbol_table.set("input_int", BuiltinFunction.input_int)
-global_symbol_table.set("clear", BuiltinFunction.clear)
-global_symbol_table.set("cls", BuiltinFunction.clear)
-global_symbol_table.set("is_number", BuiltinFunction.is_number)
-global_symbol_table.set("is_string", BuiltinFunction.is_string)
-global_symbol_table.set("is_list", BuiltinFunction.is_list)
-global_symbol_table.set("is_function", BuiltinFunction.is_function)
-global_symbol_table.set("append", BuiltinFunction.append)
-global_symbol_table.set("pop", BuiltinFunction.pop)
-global_symbol_table.set("extend", BuiltinFunction.extend)
+global_symbol_table.set("mudrayati", BuiltinFunction.print)
+global_symbol_table.set("mudrayati_punaH", BuiltinFunction.print_rt)
+global_symbol_table.set("praveshaH", BuiltinFunction.input)
+global_symbol_table.set("aMka_praveshaH", BuiltinFunction.input_int)
+global_symbol_table.set("shuddha", BuiltinFunction.clear)
+global_symbol_table.set("shuddha", BuiltinFunction.clear)
+global_symbol_table.set("aMkaH_vA", BuiltinFunction.is_number)
+global_symbol_table.set("sUtram_vA", BuiltinFunction.is_string)
+global_symbol_table.set("sUchiH_vA", BuiltinFunction.is_list)
+global_symbol_table.set("kAryaH_vA", BuiltinFunction.is_function)
+global_symbol_table.set("saMyojayati", BuiltinFunction.append)
+global_symbol_table.set("apanayati", BuiltinFunction.pop)
+global_symbol_table.set("prasArayati", BuiltinFunction.extend)
+global_symbol_table.set("parimANam", BuiltinFunction.len)
+global_symbol_table.set("dhAvayati", BuiltinFunction.run)
+global_symbol_table.set("shunya", Number.null)
+global_symbol_table.set("satya", Number.true)
+global_symbol_table.set("asatya", Number.false)
+global_symbol_table.set("pi", Number.math_pi)
+global_symbol_table.set("mudrayati", BuiltinFunction.print)
+global_symbol_table.set("mudrayati_punah", BuiltinFunction.print_rt)
+global_symbol_table.set("praveshah", BuiltinFunction.input)
+global_symbol_table.set("anka_praveshah", BuiltinFunction.input_int)
+global_symbol_table.set("shuddha", BuiltinFunction.clear)
+global_symbol_table.set("shuddha", BuiltinFunction.clear)
+global_symbol_table.set("ankah_va", BuiltinFunction.is_number)
+global_symbol_table.set("sutram_va", BuiltinFunction.is_string)
+global_symbol_table.set("suchih_va", BuiltinFunction.is_list)
+global_symbol_table.set("karyah_va", BuiltinFunction.is_function)
+global_symbol_table.set("samyojayati", BuiltinFunction.append)
+global_symbol_table.set("apanayati", BuiltinFunction.pop)
+global_symbol_table.set("prasarayati", BuiltinFunction.extend)
+global_symbol_table.set("parimanam", BuiltinFunction.len)
+global_symbol_table.set("dhavayati", BuiltinFunction.run)
 
 
 # Run
