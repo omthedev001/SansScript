@@ -1,5 +1,6 @@
-# Sans Script Version 1.0![Add a heading (6)](https://github.com/user-attachments/assets/f6b6f44e-37be-49fe-a258-d6aa7a48d574)
+# Sans Script Version 1.0!
 
+![Add a heading (7)](https://github.com/user-attachments/assets/ee1197be-711a-4dbd-98c3-1277f30f5b88)
 
 ## A programming language for boomers (and my fellow Sanskrit students)
 
